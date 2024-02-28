@@ -400,7 +400,7 @@ def findLeastEntropy():
                     coords.append((e0, e1, ep, eSum, i, j, k))
     
     # 정렬 기준: ep, e0, e1
-    coords.sort(key=lambda x:(x[0], x[1]))
+    coords.sort(key=lambda x:(x[0], x[1], x[5]))
 
     for e0, e1, ep, eSum, x, y, z in coords:
         if e0 > 0 and WFC_FIELD[x][y][z].collapsed == 0 and WFC_FIELD[x][y][z].isContradicted() == 0:

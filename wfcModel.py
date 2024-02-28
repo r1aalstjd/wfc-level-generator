@@ -75,23 +75,22 @@ class Node:
         self.propagateDelta(self.entropy, x, y, z)
         self.entropy = 0
     
-    def collapse(self, block_id = -1):
+    def collapse(self, x, y, z):
         """
             매트릭스 상에서 현재 노드의 중첩 상태를 임의의 정해진 상태로 붕괴시키는 함수.
         """
         global patternCount
         possibleStates = []
+        self.propagateDelta(self.entropy, x, y, z)
         self.entropy = 0
         self.collapsed = 1
         
-        if block_id == -1:
-            # block_id가 지정되지 않은 상태
-            for i in range(patternCount):
-                if self.states[i] != 0: possibleStates.append(i)
-            if len(possibleStates) == 0: return
-            collapsed_id = random.choice(possibleStates)
-            self.pattern_id = collapsed_id
-            self.block_id = PATTERNS[collapsed_id].getCenter()
+        for i in range(patternCount):
+            if self.states[i] != 0: possibleStates.append(i)
+        if len(possibleStates) == 0: return
+        collapsed_id = random.choice(possibleStates)
+        self.pattern_id = collapsed_id
+        self.block_id = PATTERNS[collapsed_id].getCenter()
     
     def propagate(self, x, y, z):
         """
@@ -120,12 +119,13 @@ class Node:
                     j = y - (OFF_Y+1) + q
                     k = z - (OFF_Z+1) + r
                     if i < 0 or j < 0 or k < 0 or i >= SIZE_X or j >= SIZE_Y or k >= SIZE_Z: continue
-                    if WFC_FIELD[i][j][k].collapsed == 0: updateStack.append((i, j, k))
+                    updateStack.append((i, j, k))
     
     def updateStateCell(self, x, y, z):
         """
             현재 노드의 상태 셀 업데이트 함수
         """
+        updateCheck = 0
         for p in range(MATRIX_X):
             for q in range(MATRIX_Y):
                 for r in range(MATRIX_Z):
@@ -133,7 +133,9 @@ class Node:
                     j = y - OFF_Y + q
                     k = z - OFF_Z + r
                     if i < 0 or j < 0 or k < 0 or i >= SIZE_X or j >= SIZE_Y or k >= SIZE_Z: continue
-                    self.stateCell[p][q][r] = WFC_FIELD[i][j][k].block_id
+                    if self.stateCell[p][q][r] != WFC_FIELD[i][j][k].block_id:
+                        updateCheck += 1
+                        self.stateCell[p][q][r] = WFC_FIELD[i][j][k].block_id
         count = 0
         global coverCheckIndex
         for p, q, r in coverCheckIndex:
@@ -145,6 +147,7 @@ class Node:
                 continue
             if WFC_FIELD[i][j][k].block_id != -1: count += 1
         if count == len(coverCheckIndex): self.isCovered = 1
+        return updateCheck
     
     def validatePattern(self, matrix):
         """
@@ -170,8 +173,8 @@ class Node:
             현재 노드의 중첩 상태에서 불가능한 상태 제거
         """
         if self.collapsed == 1: return
-        global patternCount
-        self.updateStateCell(x, y, z)
+        updateCheck = self.updateStateCell(x, y, z)
+        if updateCheck < 1: return
         entropyDelta = 0
         for i in range(patternCount):
             if self.states[i] != 0:
@@ -290,38 +293,27 @@ def extractPatterns(blockRegistry, timestamp):
                             for r in range(MATRIX_Z):
                                 if propMatrix[p][q][r] != blockRegistry['air']:
                                     propMatrix[p][q][r] = -1
-                
-                # 사용 불가능한 패턴 필터링
-                check = filterPatterns(propMatrix, center_id)
-                if check != 0: continue
-                
                 registerPattern(propMatrix, center_id, patterns)
-                
-                # 패턴 중심 블록이 공기 블록이 아닐 경우, 와일드카드 패턴을 같이 등록
                 #if center_id != blockRegistry['air']:
-                #    wildcardMatrix = deepcopy(propMatrix)
-                #    for p in range(MATRIX_X):
-                #        for q in range(MATRIX_Y):
-                #            for r in range(MATRIX_Z):
-                #                if wildcardMatrix[p][q][r] == blockRegistry['air']:
-                #                    wildcardMatrix[p][q][r] = -1
-                #    registerPattern(wildcardMatrix, center_id, patterns)
-                
+                #    registerPattern(propMatrix, center_id, patterns)
+    
+    #propMatrix = [[[0 for _ in range(MATRIX_Z)] for _ in range(MATRIX_Y)] for _ in range(MATRIX_X)]
+    #for p in range(MATRIX_X):
+    #    for q in range(MATRIX_Y):
+    #        for r in range(MATRIX_Z):
+    #            propMatrix[p][q][r] = -1
+    #propMatrix[OFF_X][OFF_Y][OFF_Z] = blockRegistry['air']
+    #registerPattern(propMatrix, blockRegistry['air'], patterns)
+    #propMatrix = [[[0 for _ in range(MATRIX_Z)] for _ in range(MATRIX_Y)] for _ in range(MATRIX_X)]
+    #for p in range(MATRIX_X):
+    #    for q in range(MATRIX_Y):
+    #        for r in range(MATRIX_Z):
+    #            propMatrix[p][q][r] = blockRegistry['air']
+    #registerPattern(propMatrix, blockRegistry['air'], patterns)
+    
     timeElapsed = time.time()
     print("Pattern Extraction completed. (took {}s)".format(round(timeElapsed - timestamp, 6)))
     return patterns
-
-def filterPatterns(matrix, center_id):
-    check = 0
-    return 0
-    if center_id == BLOCK_REGISTRY['air']:
-        for p in range(MATRIX_X):
-            for q in range(MATRIX_Y):
-                for r in range(MATRIX_Z):
-                    if matrix[p][q][r] == BLOCK_REGISTRY['air']:
-                        check += 1
-        return 1 if 1 <= check and check < MATRIX_X * MATRIX_Y * MATRIX_Z else 0
-    return check
 
 def registerPattern(matrix, center_id, patterns):
     # 회전 패턴 생성(Y축 시계방향)
@@ -381,15 +373,12 @@ def findLeastEntropy():
     # 정렬 기준: patternEntropy, nodeEntropy
     coords.sort(key=lambda x:(x[0], x[1]))
     
-    idx = 0
     for e1, e2, x, y, z in coords:
         if e1 > 0 and e2 > 0 and WFC_FIELD[x][y][z].collapsed == 0 and WFC_FIELD[x][y][z].isContradicted() == 0:
             return (x, y, z)
-        idx += 1
     
     # 매트릭스의 모든 원소가 붕괴된 상태
-    if idx == len(coords):
-        return (-1, -1, -1)
+    return (-1, -1, -1)
 
 def checkContradiction():
     """
@@ -434,7 +423,7 @@ def WFCStep(step = -1, debug = 0, debugfile = None):
         print("Wave matrix has collapsed into singular state.")
         return 0
     WFC_FIELD[x][y][z].prohibitState(x, y, z)
-    WFC_FIELD[x][y][z].collapse()
+    WFC_FIELD[x][y][z].collapse(x, y, z)
     WFC_FIELD[x][y][z].propagate(x, y, z)
     
     if debug:
@@ -580,4 +569,16 @@ if __name__ == '__main__':
 """
     TODO
     
+"""
+"""
+
+Entropy = -p(x)log(p(x))
+
+p(x)        = w / sum
+log(p(x))   = log(w/sum)    = log(w) - log(sum)
+
+->  w / sum * (log(sum) - log(w))
+->  w / sum * log(sum) - w / sum * log(w)
+->  w * log(sum) / sum - w * log(w) / sum
+
 """
