@@ -6,19 +6,17 @@ INPUT_DIR = './Input/'
 inputWorld = anvil.Region.from_file(INPUT_DIR + 'r.0.0.mca')
 inputCache = []
 
-def getMaxY():
-    global inputWorld
+def getMaxY(inputWorld):
     for i in range(1000):
         if anvil.Chunk.from_region(inputWorld, 0, 0).get_block(0, i, 0).id == 'air':
             return i
     else:
         return 0
 
-def getBlock(x, y, z):
+def getBlock(x, y, z, inputWorld, inputCache):
     """
         실제 월드에서의 (x, y, z) 좌표에 위치한 블록 객체를 반환하는 함수.
     """
-    global inputWorld, inputCache
     if inputCache[x][y][z] != 0: return inputCache[x][y][z]
     else:
         chunk__x = x // 16
@@ -28,12 +26,11 @@ def getBlock(x, y, z):
         inputCache[x][y][z] = anvil.Chunk.from_region(inputWorld, chunk__x, chunk__z).get_block(block__x, y, block__z)
         return inputCache[x][y][z]
 
-def registerBlocks():
+def registerBlocks(inputWorld):
     """
         읽어온 월드 파일 내 존재하는 블록을 레지스트리에 등록하는 함수
     """
-    from wfcModel import SIZE_X, SIZE_Y, SIZE_Z
-    global inputWorld
+    from wfcModelTest import SIZE_X, SIZE_Y, SIZE_Z
     blockRegistry = {}
     blockRegistryInv = []
     
@@ -54,7 +51,7 @@ def extractPatterns(blockRegistry, patterns):
     """
         월드 파일 내 블록 배치 패턴을 추출하는 함수
     """
-    from wfcModel import SIZE_X, SIZE_Y, SIZE_Z
+    from wfcModelTest import SIZE_X, SIZE_Y, SIZE_Z
     off_x = MATRIX_X // 2
     off_y = MATRIX_Y // 2
     off_z = MATRIX_Z // 2
