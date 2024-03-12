@@ -1,7 +1,7 @@
 import anvil, time
 from copy import deepcopy
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, INPUT_DIR, OUTPUT_DIR
-from wfcModel import Node, Pattern
+from wfcModel import Pattern
 
 #inputWorld = anvil.Region.from_file(INPUT_DIR + 'r.0.0.mca')
 #inputCache = []
@@ -130,7 +130,10 @@ def registerPattern(matrix, center_id, patterns):
         else:
             patterns.append(Pattern(extractedPattern, center_id, 1))
 
-def writeMCA(wfcMatrix: list[list[list[Node]]], blockRegistryInv, epoch = 0):
+def writeMCA(dim_x, dim_y, dim_z, matrix:list[list[list]], blockRegistryInv, epoch = 0):
+    """
+        완성된 3차원 월드 배열을 MCA 파일로 변환해 내보내는 함수
+    """
     blockCount = len(blockRegistryInv)
     outputWorld = anvil.EmptyRegion(0, 0)
     blockClass = []
@@ -138,10 +141,10 @@ def writeMCA(wfcMatrix: list[list[list[Node]]], blockRegistryInv, epoch = 0):
     for i in range(blockCount):
         stringID = blockRegistryInv[i]
         blockClass.append(anvil.Block('minecraft', stringID))
-    for x in range(SIZE_X):
-        for y in range(SIZE_Y):
-            for z in range(SIZE_Z):
-                block_id = wfcMatrix[x][y][z].block_id
+    for x in range(dim_x):
+        for y in range(dim_y):
+            for z in range(dim_z):
+                block_id = matrix[x][y][z]
                 if block_id == -1: outputWorld.set_block(barrier, x, y, z)
                 else: outputWorld.set_block(blockClass[block_id], x, y, z)
     if epoch == 0:
