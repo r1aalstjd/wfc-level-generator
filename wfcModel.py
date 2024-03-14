@@ -251,10 +251,19 @@ class Node:
                     if matrix[i][j][k] in self.excludeBlocks:
                         if self.stateCell[i][j][k] != matrix[i][j][k]:
                             return 0
-                    if self.stateCell[i][j][k] == -1 or matrix[i][j][k] == -1:
-                        continue
-                    if self.stateCell[i][j][k] != matrix[i][j][k]:
-                        return 0
+                    if self.stateCell[i][j][k] < 0:
+                        if self.stateCell[i][j][k] == -2:
+                            if matrix[i][j][k] == self.blockRegistry['air']:
+                                return 0
+                        if self.stateCell[i][j][k] == -3:
+                            if matrix[i][j][k] != self.blockRegistry['air']:
+                                return 0
+                        if self.stateCell[i][j][k] == -1 or matrix[i][j][k] == -1:
+                            continue
+                    else:
+                        if matrix[i][j][k] == -1: continue
+                        if self.stateCell[i][j][k] != matrix[i][j][k]:
+                            return 0
         return 1
     
     def prohibitState(self, x, y, z):
