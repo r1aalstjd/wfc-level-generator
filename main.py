@@ -1,7 +1,7 @@
-import anvil, time, random
+import anvil, time, random, numpy as np
 import wfcModel, mcaFileIO
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, INPUT_DIR, OUTPUT_DIR
-from heuristicConfig import COMPLEXITY, ENTRY_POS, POS_MASK_SIZE, NODE_DIST_MAX, CUBOID_PADDING
+from heuristicConfig import COMPLEXITY, ENTRY_POS, POS_MASK_SIZE, NODE_DIST_MAX, CUBOID_PADDING, EDGE_MAX_DY, EDGE_MAX_SLOPE
 from wfcModel import wfcModel, Node, Pattern
 
 inputWorld = anvil.Region.from_file(INPUT_DIR + 'r.0.0.mca')
@@ -20,7 +20,10 @@ DIM_Z = SIZE_Z
 
 BLOCK_REGISTRY = {}
 BLOCK_REGISTRY_INV = []
+EXCLUDE_BLOCK_STRING_ID = ['bedrock', 'air', 'gray_wool', 'light_gray_wool', 'black_wool']
+EXCLUDE_BLOCK_ID = set()
 PATTERNS = []
+INF = 2147483647
 
 initLevel = None
 
@@ -28,11 +31,13 @@ def mcaInitializer():
     """
         월드 파일을 읽고 블록 레지스트리 등록, 패턴 추출 수행
     """
-    global DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, BLOCK_REGISTRY, BLOCK_REGISTRY_INV, PATTERNS
+    global DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, BLOCK_REGISTRY, BLOCK_REGISTRY_INV, PATTERNS, EXCLUDE_BLOCK_STRING_ID, EXCLUDE_BLOCK_ID
     timestamp = time.time()
     DIM_Y = mcaFileIO.getMaxY(inputWorld)
     inputCache = [[[-1 for _ in range(DIM_Z)] for _ in range(DIM_Y)] for _ in range(DIM_X)]
     BLOCK_REGISTRY, BLOCK_REGISTRY_INV = mcaFileIO.registerBlocks(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, timestamp)
+    for block_id in EXCLUDE_BLOCK_STRING_ID:
+        EXCLUDE_BLOCK_ID.add(BLOCK_REGISTRY[block_id])
     PATTERNS = mcaFileIO.extractPatterns(DIM_X, DIM_Y, DIM_Z, BLOCK_REGISTRY, inputWorld, inputCache, timestamp)
 
 def levelInitializer():
@@ -162,6 +167,11 @@ def createMovementGraph(nodeList):
             dx = i - p
             dy = j - q
             dz = k - r
+            cost = evaluateEdge(node, idx)
+            
+            # 두 노드 간의 이동 비용이 무한대일 경우 무시
+            if cost >= INF: continue
+            
             quad_x = 1 if dx >= 0 else 0
             quad_z = 1 if dz >= 0 else 0
             if edgeQuadrant[quad_x][quad_z] == 0:
@@ -169,16 +179,35 @@ def createMovementGraph(nodeList):
                 a = node
                 b = idx
                 if a > b: a, b = b, a
-                edgeSet.add((a, b, d))
+                
+                # 정점 번호의 오름차순으로 집합에 추가
+                edgeSet.add((a, b, d, cost))
                 edgeQuadrant[quad_x][quad_z] = 1
     return movementGraph
 
-def evaluateEdges():
-    pass
+def evaluateEdge(idx1, idx2):
+    """
+        레벨 내부의 두 정점으로 결정된 간선의 이동 비용을 평가하는 함수.
+        idx1, idx2  - 두 정점의 번호
+    """
+    cost = 0
+    x1, y1, z1 = nodeList[idx1]
+    x2, y2, z2 = nodeList[idx2]
+    dx = (x1 - x2) * (x1 - x2)
+    dy = (y1 - y2) * (y1 - y2)
+    dz = (z1 - z2) * (z1 - z2)
+    distSquared = dx + dy + dz
+    volumeSquared = dx * dy * dz
+    slope = abs(y1 - y2) / (dx + dz) ** 0.5
+    if abs(y1 - y2) > EDGE_MAX_DY:
+        return INF
+    if slope >= EDGE_MAX_SLOPE:
+        return INF
+    return volumeSquared
 
 def getCuboid(idx1, idx2):
     """
-        레벨 내부의 두 정점으로 결정되는 직육면체 구역을 반환하는 함수
+        레벨 내부의 두 정점으로 결정되는 직육면체 구역을 반환하는 함수.
         idx1, idx2  - 두 정점의 번호
     """
     global nodeList
@@ -193,10 +222,21 @@ def getCuboid(idx1, idx2):
     y2 = min(DIM_Y - 1, max(0, y2 + CUBOID_PADDING))
     z1 = min(DIM_Z - 1, max(0, z1 - CUBOID_PADDING))
     z2 = min(DIM_Z - 1, max(0, z2 + CUBOID_PADDING))
-    return x1, 0, z1, x2, y2, z2
+    return x1, y1, z1, x2, y2, z2
 
 def createLevel():
-    pass
+    """
+        생성한 플레이어 동선 그래프를 바탕으로 레벨을 생성하는 함수
+    """
+    global initLevel, nodeList, edgeSet
+    edgeList = list(edgeSet)
+    # 간선의 비용을 기준으로 오름차순 정렬
+    edgeList.sort(key=lambda x: x[3])
+    for edge in edgeList:
+        idx1, idx2, d, cost = edge
+        constructPath(idx1, idx2)
+        
+        if True: break
 
 def applyPatternFilter(x, y, z, mask):
     """
@@ -211,6 +251,7 @@ def applyPatternFilter(x, y, z, mask):
         if p < 0 or r < 0 or p >= DIM_X or r >= DIM_Z: continue
         if initLevel[p][y][r] == -1:
             initLevel[p][y][r] = mask
+    if initLevel[x][y][z] == -1: initLevel[x][y][z] = mask
 
 def constructPath(idx1, idx2):
     """
@@ -218,18 +259,33 @@ def constructPath(idx1, idx2):
         idx1, idx2  - 두 정점의 번호
     """
     global initLevel, nodeList
+    x1, y1, z1, x2, y2, z2 = getCuboid(idx1, idx2)
+    y1 = 0
+    
+    
+    nodeRelativeCoords = []
     for idx in (idx1, idx2):
         p, q, r = nodeList[idx]
+        nodeRelativeCoords.append((p - x1, q - y1, r - z1))
         applyPatternFilter(p, q, r, -3)
-        applyPatternFilter(p, q+1, r, -2)
-    x1, y1, z1, x2, y2, z2 = getCuboid(idx1, idx2)
-    pathSegment = initLevel[x1:x2+1][y1:y2+1][z1:z2+1]
-    generatorModel = wfcModel(x2-x1+1, y2-y1+1, z2-z1+1, pathSegment, PATTERNS, BLOCK_REGISTRY,)
-    pathSegment = wfcModel.generate()
+        applyPatternFilter(p, q+1, r, BLOCK_REGISTRY['air'])
+    
+    pathSegment = np.array(initLevel)
+    pathSegment = pathSegment[x1:x2+1, y1:y2+1, z1:z2+1]
+    pathSegment = list(pathSegment)
+    seg_x, seg_y, seg_z = x2-x1+1, y2-y1+1, z2-z1+1
+    for x in range(seg_x):
+        for y in range(seg_y):
+            for z in range(seg_z):
+                if x == 0 or x == seg_x-1 or y == 0 or y == seg_y-1 or z == 0 or z == seg_z-1:
+                    if pathSegment[x][y][z] == -1: pathSegment[x][y][z] = BLOCK_REGISTRY['air']
+    
+    generatorModel = wfcModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY, excludeBlocks=EXCLUDE_BLOCK_ID, priortizedCoords=nodeRelativeCoords)
+    pathSegment = generatorModel.generate()
     for x in range(x1, x2+1):
         for y in range(y1, y2+1):
             for z in range(z1, z2+1):
-                initLevel[x][y][z] = pathSegment[x][y][z]
+                initLevel[x][y][z] = pathSegment[x-x1][y-y1][z-z1]
 
 if __name__ == "__main__":
     mcaInitializer()
@@ -237,15 +293,12 @@ if __name__ == "__main__":
     print(BLOCK_REGISTRY)
     selectNodes()
     movementGraph = createMovementGraph(nodeList)
-    print(movementGraph)
     
-    debugField = [[-1 for _ in range(DIM_Z)] for _ in range(DIM_X)]
-    for idx in range(len(nodeList)):
-        i, j, k = nodeList[idx]
-        debugField[i][k] = idx
-    for i in range(DIM_X):
-        for k in range(DIM_Z):
-            print("{:>2} ".format(debugField[i][k] if debugField[i][k] != -1 else '--'), end='')
-        print()
-    
-    # TODO WFC 알고리즘 클래스 테스트
+    createLevel()
+    #debugWorld = open('./Debug/debugWorld.txt', 'w+')
+    #for y in range(DIM_Y):
+    #    for x in range(DIM_X):
+    #        for z in range(DIM_Z):
+    #            debugWorld.write('{:>2} '.format(initLevel[x][y][z]))
+    #        debugWorld.write('\n')
+    #    debugWorld.write('\n')
