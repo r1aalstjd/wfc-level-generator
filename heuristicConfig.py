@@ -17,4 +17,4 @@ CUBOID_PADDING = 3
 EDGE_MAX_DY = 6
 
 # 플레이어 동선 그래프 상에서 간선의 최대 경사
-EDGE_MAX_SLOPE = 6.0
+EDGE_MAX_SLOPE = 1.0

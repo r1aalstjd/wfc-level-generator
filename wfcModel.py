@@ -14,9 +14,9 @@ class wfcModel:
         
         excludeBlocks       - 레벨 내부에 등장할 수 없는 블록 리스트
         
-        prioritizedCoords   - WFC 알고리즘 실행 시 우선적으로 처리할 좌표 리스트
+        prioritizedCoords   - WFC 알고리즘 실행 시 우선적으로 붕괴할 노드의 좌표 리스트
     """
-    def __init__(self, dim_x:int, dim_y:int, dim_z:int, initWave, patterns, blockRegistry, excludeBlocks, priortizedCoords:list = []):
+    def __init__(self, dim_x:int, dim_y:int, dim_z:int, initWave, patterns, blockRegistry, excludeBlocks, priortizedCoords:list[tuple[int, int, int]] = []):
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.dim_z = dim_z
@@ -40,6 +40,17 @@ class wfcModel:
         """
         if not self.waveFunc:
             raise ValueError("Wave Function Collapse model is not initialized.")
+        
+        debugWorld = open('./Debug/debugWorld.txt', 'w+')
+        for y in range(self.dim_y):
+            for x in range(self.dim_x):
+                for z in range(self.dim_z):
+                    e1, e2 = self.waveFunc[x][y][z].getEntropy()
+                    debugWorld.write('{:>4} '.format(e1))
+                debugWorld.write('\n')
+            debugWorld.write('\n')
+        debugWorld.close()
+        
         # 플레이어 동선 그래프의 정점 위치에 해당하는 노드 우선 붕괴 및 전파
         for coord in self.prioritizedCoords:
             x, y, z = coord
@@ -55,13 +66,14 @@ class wfcModel:
             if check == 0:
                 break
         
-        debugWorld = open('./Debug/debugWorld.txt', 'w+')
+        debugWorld = open('./Debug/debugWorld.txt', 'a+')
         for y in range(self.dim_y):
             for x in range(self.dim_x):
                 for z in range(self.dim_z):
                     debugWorld.write('{:>2} '.format(self.waveFunc[x][y][z].block_id))
                 debugWorld.write('\n')
             debugWorld.write('\n')
+        debugWorld.close()
         
         cont = self.checkContradiction()
         if cont: return None
@@ -92,7 +104,7 @@ class wfcModel:
             distMin = min(distMin, distSquared)
         return distMin, nodeEntropy, patternEntropy
     
-    def findLeastEntropy(self):
+    def findLeastEntropy(self) -> tuple[int, int, int]:
         """
             매트릭스 내 엔트로피가 최소인 노드의 좌표를 반환하는 함수.
         """

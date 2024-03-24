@@ -245,13 +245,13 @@ def applyPatternFilter(x, y, z, mask):
         -3  - 공기 블록이 아닌 것만 받아들이는 필터
     """
     global initLevel
+    if initLevel[x][y][z] == -1: initLevel[x][y][z] = mask
     for i in range(8):
         p = x + dx_3x3[i]
         r = z + dz_3x3[i]
         if p < 0 or r < 0 or p >= DIM_X or r >= DIM_Z: continue
         if initLevel[p][y][r] == -1:
             initLevel[p][y][r] = mask
-    if initLevel[x][y][z] == -1: initLevel[x][y][z] = mask
 
 def constructPath(idx1, idx2):
     """
