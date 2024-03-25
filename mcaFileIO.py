@@ -1,6 +1,6 @@
 import anvil, time
 from copy import deepcopy
-from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, INPUT_DIR, OUTPUT_DIR
+from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, INPUT_DIR, OUTPUT_DIR, HASH_MODULO
 from wfcModel import Pattern
 
 #inputWorld = anvil.Region.from_file(INPUT_DIR + 'r.0.0.mca')
@@ -13,7 +13,7 @@ def getMaxY(inputWorld):
     else:
         return 0
 
-def getBlock(x, y, z, inputWorld, inputCache):
+def getBlock(x, y, z, inputWorld, inputCache, chunkCache):
     """
         실제 월드에서의 (x, y, z) 좌표에 위치한 블록 객체를 반환하는 함수.
     """
@@ -23,10 +23,12 @@ def getBlock(x, y, z, inputWorld, inputCache):
         chunk__z = z // 16
         block__x = x % 16
         block__z = z % 16
-        inputCache[x][y][z] = anvil.Chunk.from_region(inputWorld, chunk__x, chunk__z).get_block(block__x, y, block__z)
+        if chunkCache[chunk__x][chunk__z] == None:
+            chunkCache[chunk__x][chunk__z] = anvil.Chunk.from_region(inputWorld, chunk__x, chunk__z)
+        inputCache[x][y][z] = chunkCache[chunk__x][chunk__z].get_block(block__x, y, block__z)
         return inputCache[x][y][z]
 
-def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, timestamp):
+def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, timestamp):
     """
         읽어온 월드 파일 내 존재하는 블록을 레지스트리에 등록하는 함수
     """
@@ -36,7 +38,7 @@ def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, timestamp):
     for i in range(dim_x):
         for j in range(dim_y):
             for k in range(dim_z):
-                block_id = getBlock(i, j, k, inputWorld, inputCache).id
+                block_id = getBlock(i, j, k, inputWorld, inputCache, chunkCache).id
                 blockRegistry[block_id] = 1
     q = 0
     for key in blockRegistry:
@@ -47,11 +49,12 @@ def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, timestamp):
     print("Block Registration completed. (took {}s)".format(round(timeElapsed - timestamp, 6)))
     return blockRegistry, blockRegistryInv
 
-def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, inputWorld, inputCache, timestamp):
+def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, inputWorld, inputCache, chunkCache, timestamp):
     """
         월드 파일 내 블록 배치 패턴을 추출하는 함수
     """
     patterns = []
+    patternHashTable = [-1 for _ in range(HASH_MODULO + 1)]
     for i in range(dim_x):
         for j in range(dim_y):
             for k in range(dim_z):
@@ -67,8 +70,8 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, inputWorld, inputCache, 
                                 propMatrix[p][q][r] = -1
                                 check += 1
                             else:
-                                propMatrix[p][q][r] = blockRegistry[getBlock(x, y, z, inputWorld, inputCache).id]
-                center_id = blockRegistry[getBlock(i, j, k, inputWorld, inputCache).id]
+                                propMatrix[p][q][r] = blockRegistry[getBlock(x, y, z, inputWorld, inputCache, chunkCache).id]
+                center_id = blockRegistry[getBlock(i, j, k, inputWorld, inputCache, chunkCache).id]
                 
                 # 범위 밖 공간을 포함하는 패턴 필터링
                 if check != 0: continue
@@ -80,7 +83,7 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, inputWorld, inputCache, 
                             for r in range(MATRIX_Z):
                                 if propMatrix[p][q][r] != blockRegistry['air']:
                                     propMatrix[p][q][r] = -1
-                registerPattern(propMatrix, center_id, patterns)
+                registerPattern(propMatrix, center_id, patterns, patternHashTable)
                 #if center_id != blockRegistry['air']:
                 #    registerPattern(propMatrix, center_id, patterns)
     
@@ -102,7 +105,7 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, inputWorld, inputCache, 
     print("Pattern Extraction completed. (took {}s)".format(round(timeElapsed - timestamp, 6)))
     return patterns
 
-def registerPattern(matrix, center_id, patterns):
+def registerPattern(matrix, center_id, patterns, patternHashTable):
     # 회전 패턴 생성(Y축 시계방향)
     rotated90 = deepcopy(matrix)
     rotated180 = deepcopy(matrix)
@@ -123,12 +126,23 @@ def registerPattern(matrix, center_id, patterns):
     
     # 패턴 중복 제거
     for extractedPattern in rotatedSet:
-        for pattern in patterns:
-            if pattern.isEqual(extractedPattern):
-                pattern.count += 1
-                break
+        hashValue = patternHash(extractedPattern)
+        if patternHashTable[hashValue] > -1:
+            patterns[patternHashTable[hashValue]].count += 1
         else:
+            patternHashTable[hashValue] = len(patterns)
             patterns.append(Pattern(extractedPattern, center_id, 1))
+
+def patternHash(pattern):
+    """
+        패턴 해시값을 반환하는 함수
+    """
+    hashValue = 0
+    for x in range(MATRIX_X):
+        for y in range(MATRIX_Y):
+            for z in range(MATRIX_Z):
+                hashValue = (hashValue * 31 + pattern[x][y][z]) % HASH_MODULO
+    return hashValue
 
 def writeMCA(dim_x, dim_y, dim_z, matrix:list[list[list]], blockRegistryInv, epoch = 0):
     """

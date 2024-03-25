@@ -29,9 +29,25 @@ class wfcModel:
         self.excludeBlocks = excludeBlocks
         self.prioritizedCoords = priortizedCoords
         self.waveFunc = [[[Node(dim_x, dim_y, dim_z, states=nodeStates, patterns=self.patterns, blockRegistry=blockRegistry, excludeBlocks=self.excludeBlocks, updateStack=self.updateStack) for _ in range(dim_z)] for _ in range(dim_y)] for _ in range(dim_x)]
+        self.possibleBlocks = [[[set(i for i in range(len(blockRegistry))) for _ in range(dim_z)] for _ in range(dim_y)] for _ in range(dim_x)]
         
         self.entropyInitializer()
         self.waveFunctionInitializer(initWave=initWave)
+    
+    def debugOutput(self, dir, mode = 'w+', coord = None):
+        """
+            디버그용 - 파동 함수의 현재 상태를 파일로 출력
+        """
+        debugWorld = open(dir, mode)
+        if coord:
+            debugWorld.write('{:>2} {:>2} {:>2}\n'.format(coord[0], coord[1], coord[2]))
+        for y in range(self.dim_y):
+            for x in range(self.dim_x):
+                for z in range(self.dim_z):
+                    debugWorld.write('{:>2} '.format(self.waveFunc[x][y][z].block_id))
+                debugWorld.write('\n')
+            debugWorld.write('\n')
+        debugWorld.close()
     
     def generate(self):
         """
@@ -58,6 +74,8 @@ class wfcModel:
             self.waveFunc[x][y][z].collapse(x, y, z)
             self.waveFunc[x][y][z].propagate(x, y, z, self.updateStack)
         
+        self.debugOutput('./testOutputs/worldInit.txt', 'w+')
+        
         # WFC 알고리즘 실행
         step = 0
         while True:
@@ -66,14 +84,7 @@ class wfcModel:
             if check == 0:
                 break
         
-        debugWorld = open('./Debug/debugWorld.txt', 'a+')
-        for y in range(self.dim_y):
-            for x in range(self.dim_x):
-                for z in range(self.dim_z):
-                    debugWorld.write('{:>2} '.format(self.waveFunc[x][y][z].block_id))
-                debugWorld.write('\n')
-            debugWorld.write('\n')
-        debugWorld.close()
+        #self.debugOutput('./Debug/debugWorld.txt', 'w+')
         
         cont = self.checkContradiction()
         if cont: return None
@@ -93,6 +104,9 @@ class wfcModel:
         self.waveFunc[x][y][z].prohibitState(x, y, z)
         self.waveFunc[x][y][z].collapse(x, y, z)
         self.waveFunc[x][y][z].propagate(x, y, z, self.updateStack)
+        
+        self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
+        
         return 1
     
     def calculateEntropy(self, x, y, z):
@@ -115,11 +129,11 @@ class wfcModel:
                     dist, nodeEntropy, patternEntropy = self.calculateEntropy(i, j, k)
                     if self.waveFunc[i][j][k].collapsed == 0 and self.waveFunc[i][j][k].isContradicted() == 0:
                         coords.append((dist, nodeEntropy, patternEntropy, i, j, k))
-        # 정렬 기준: 거리 -> 노드 엔트로피 -> 패턴 엔트로피
-        coords.sort(key=lambda x:(x[0], x[1], x[2]))
+        # 정렬 기준: 엔트로피 -> 좌표 -> 패턴 엔트로피
+        coords.sort(key=lambda x:(x[1], x[0], x[2]))
         for d, e1, e2, x, y, z in coords:
             if e1 > 0 and e2 > 0 and self.waveFunc[x][y][z].collapsed == 0 and self.waveFunc[x][y][z].isContradicted() == 0:
-                print(d, e1, e2)
+                print('{:>4} {:>4} {:>4} | '.format(d, e1, e2), end='')
                 return (x, y, z)
         # 매트릭스의 모든 원소가 붕괴된 상태
         return (-1, -1, -1)
@@ -163,6 +177,7 @@ class wfcModel:
             for j in range(self.dim_y):
                 for k in range(self.dim_z):
                     self.waveFunc[i][j][k].waveFunc = self.waveFunc
+                    self.waveFunc[i][j][k].possibleBlocks = self.possibleBlocks
                     if initWave[i][j][k] > -1:
                         self.waveFunc[i][j][k].setBlockID(initWave[i][j][k], i, j, k)
                     if initWave[i][j][k] < -1:
@@ -190,11 +205,13 @@ class Node:
         
         self.coverCheckIndex = ((0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0))
         self.waveFunc = []
+        self.possibleBlocks = []
         self.blockRegistry = blockRegistry
         self.excludeBlocks = excludeBlocks
         self.patterns = patterns
         self.updateStack = updateStack
         self.patternCount = len(patterns)
+        self.blockCount = len(blockRegistry)
     
     def __call__(self):
         return self
@@ -283,9 +300,9 @@ class Node:
                     j = y - OFF_Y + q
                     k = z - OFF_Z + r
                     if i < 0 or j < 0 or k < 0 or i >= self.dim_x or j >= self.dim_y or k >= self.dim_z: continue
-                    if self.stateCell[p][q][r] != self.waveFunc[i][j][k].block_id:
+                    if self.stateCell[p][q][r] != self.possibleBlocks[i][j][k]:
                         updateCheck += 1
-                        self.stateCell[p][q][r] = self.waveFunc[i][j][k].block_id
+                        self.stateCell[p][q][r] = self.possibleBlocks[i][j][k]
         count = 0
         for p, q, r in self.coverCheckIndex:
             i = x - OFF_X + p
@@ -324,7 +341,7 @@ class Node:
                     # 상태 셀에 블록 ID가 지정된 경우
                     else:
                         if matrix[i][j][k] == -1: continue
-                        if self.stateCell[i][j][k] != matrix[i][j][k]:
+                        if matrix[i][j][k] not in self.stateCell[i][j][k]:
                             return 0
         return 1
     
@@ -336,11 +353,25 @@ class Node:
         updateCheck = self.updateStateCell(x, y, z)
         if updateCheck < 1: return
         entropyDelta = 0
+        blockStateCount = [[[[0 for _ in range(self.blockCount)] for _ in range(MATRIX_Z)] for _ in range(MATRIX_Y)] for _ in range(MATRIX_X)]
         for i in range(self.patternCount):
             if self.states[i] != 0:
                 if self.validatePattern(self.patterns[i].state) == 0:
                     self.states[i] = 0
                     entropyDelta += 1
+                else:
+                    for p in range(MATRIX_X):
+                        for q in range(MATRIX_Y):
+                            for r in range(MATRIX_Z):
+                                patternBlockID = self.patterns[i].state[p][q][r]
+                                if patternBlockID >= 0:
+                                    blockStateCount[p][q][r][patternBlockID] = 1
+        for p in range(MATRIX_X):
+            for q in range(MATRIX_Y):
+                for r in range(MATRIX_Z):
+                    for s in range(self.blockCount):
+                        if blockStateCount[p][q][r][s] == 0:
+                            self.possibleBlocks[x - OFF_X + p][y - OFF_Y + q][z - OFF_Z + r].discard(s)
         self.entropy -= entropyDelta
         self.propagateDelta(entropyDelta, x, y, z)
     
@@ -374,3 +405,8 @@ class Pattern:
                     if self.state[i][j][k] == matrix[i][j][k]:
                         cnt += 1
         return 1 if cnt == MATRIX_X * MATRIX_Y * MATRIX_Z else 0
+
+"""
+    TODO
+    - 노드 클래스 상태 셀을 가능한 블록 집합을 저장하도록 수정
+"""

@@ -6,6 +6,7 @@ from wfcModel import wfcModel, Node, Pattern
 
 inputWorld = anvil.Region.from_file(INPUT_DIR + 'r.0.0.mca')
 inputCache = []
+chunkCache = [[None for _ in range(SIZE_Z // 16 + 1)] for _ in range(SIZE_X // 16 + 1)]
 
 nodeList = []
 edgeSet = set()
@@ -31,14 +32,14 @@ def mcaInitializer():
     """
         월드 파일을 읽고 블록 레지스트리 등록, 패턴 추출 수행
     """
-    global DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, BLOCK_REGISTRY, BLOCK_REGISTRY_INV, PATTERNS, EXCLUDE_BLOCK_STRING_ID, EXCLUDE_BLOCK_ID
+    global DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, BLOCK_REGISTRY, BLOCK_REGISTRY_INV, PATTERNS, EXCLUDE_BLOCK_STRING_ID, EXCLUDE_BLOCK_ID
     timestamp = time.time()
     DIM_Y = mcaFileIO.getMaxY(inputWorld)
     inputCache = [[[-1 for _ in range(DIM_Z)] for _ in range(DIM_Y)] for _ in range(DIM_X)]
-    BLOCK_REGISTRY, BLOCK_REGISTRY_INV = mcaFileIO.registerBlocks(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, timestamp)
+    BLOCK_REGISTRY, BLOCK_REGISTRY_INV = mcaFileIO.registerBlocks(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, timestamp)
     for block_id in EXCLUDE_BLOCK_STRING_ID:
         EXCLUDE_BLOCK_ID.add(BLOCK_REGISTRY[block_id])
-    PATTERNS = mcaFileIO.extractPatterns(DIM_X, DIM_Y, DIM_Z, BLOCK_REGISTRY, inputWorld, inputCache, timestamp)
+    PATTERNS = mcaFileIO.extractPatterns(DIM_X, DIM_Y, DIM_Z, BLOCK_REGISTRY, inputWorld, inputCache, chunkCache, timestamp)
 
 def levelInitializer():
     global DIM_X, DIM_Y, DIM_Z, initLevel, BLOCK_REGISTRY
@@ -118,7 +119,7 @@ def selectNodes():
 def maskPosition(p, q, r, posMask):
     """
         결정한 정점 주변 정육면체 구역을 마스킹하는 함수
-        POS_MASK_SIZE   - 
+        POS_MASK_SIZE   - 마스킹할 구역의 크기
     """
     global POS_MASK_SIZE
     maskedCount = 0
@@ -198,6 +199,7 @@ def evaluateEdge(idx1, idx2):
     dz = (z1 - z2) * (z1 - z2)
     distSquared = dx + dy + dz
     volumeSquared = dx * dy * dz
+    if dx + dz <= 0: return INF
     slope = abs(y1 - y2) / (dx + dz) ** 0.5
     if abs(y1 - y2) > EDGE_MAX_DY:
         return INF

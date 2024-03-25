@@ -1,5 +1,5 @@
 # 플레이어 동선 그래프 복잡도 - 도달 가능 위치(정점) 결정 수
-COMPLEXITY = 10
+COMPLEXITY = 20
 
 # 결정한 정점 주변 다른 정점 생성 방지 구역 크기
 POS_MASK_SIZE = 7
