@@ -264,11 +264,13 @@ def constructPath(idx1, idx2):
     x1, y1, z1, x2, y2, z2 = getCuboid(idx1, idx2)
     y1 = 0
     
-    
+    # 경로를 생성할 구역 기준 노드의 상대 좌표를 저장
     nodeRelativeCoords = []
     for idx in (idx1, idx2):
         p, q, r = nodeList[idx]
         nodeRelativeCoords.append((p - x1, q - y1, r - z1))
+        if p == 0 or p == DIM_X-1 or r == 0 or r == DIM_Z-1:
+            continue
         applyPatternFilter(p, q, r, -3)
         applyPatternFilter(p, q+1, r, BLOCK_REGISTRY['air'])
     
@@ -282,6 +284,7 @@ def constructPath(idx1, idx2):
                 if x == 0 or x == seg_x-1 or y == 0 or y == seg_y-1 or z == 0 or z == seg_z-1:
                     if pathSegment[x][y][z] == -1: pathSegment[x][y][z] = BLOCK_REGISTRY['air']
     
+    # 파동함수 붕괴 모델 초기화 및 경로 생성
     generatorModel = wfcModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY, excludeBlocks=EXCLUDE_BLOCK_ID, priortizedCoords=nodeRelativeCoords)
     pathSegment = generatorModel.generate()
     for x in range(x1, x2+1):
