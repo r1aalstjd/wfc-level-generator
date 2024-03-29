@@ -28,6 +28,32 @@ def getBlock(x, y, z, inputWorld, inputCache, chunkCache):
         inputCache[x][y][z] = chunkCache[chunk__x][chunk__z].get_block(block__x, y, block__z)
         return inputCache[x][y][z]
 
+def extractFilterWhitelist(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, blockRegistry, floorBlockID, wallBlockID) -> tuple[set, set]: 
+    """
+        필터링을 위한 블록 목록을 추출하는 함수
+    """
+    floorFilter = set()
+    wallFilter = set()
+    for i in range(dim_x):
+        for j in range(dim_y):
+            for k in range(dim_z):
+                block_string_id = getBlock(i, j, k, inputWorld, inputCache, chunkCache).id
+                block_id = blockRegistry[block_string_id]
+                if block_id == floorBlockID:
+                    floorFilter.add(blockRegistry[getBlock(i, j+1, k, inputWorld, inputCache, chunkCache).id])
+                if block_id == wallBlockID:
+                    if i == 0:
+                        wallFilter.add(blockRegistry[getBlock(i+1, j, k, inputWorld, inputCache, chunkCache).id])
+                    if i == dim_x - 1:
+                        wallFilter.add(blockRegistry[getBlock(i-1, j, k, inputWorld, inputCache, chunkCache).id])
+                    if k == 0:
+                        wallFilter.add(blockRegistry[getBlock(i, j, k+1, inputWorld, inputCache, chunkCache).id])
+                    if k == dim_z - 1:
+                        wallFilter.add(blockRegistry[getBlock(i, j, k-1, inputWorld, inputCache, chunkCache).id])
+    floorFilter.discard(floorBlockID)
+    wallFilter.discard(wallBlockID)
+    return floorFilter, wallFilter
+
 def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, timestamp):
     """
         읽어온 월드 파일 내 존재하는 블록을 레지스트리에 등록하는 함수
@@ -49,17 +75,18 @@ def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, time
     print("Block Registration completed. (took {}s)".format(round(timeElapsed - timestamp, 6)))
     return blockRegistry, blockRegistryInv
 
-def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, inputWorld, inputCache, chunkCache, timestamp):
+def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, excludeBlocks, inputWorld, inputCache, chunkCache, timestamp):
     """
         월드 파일 내 블록 배치 패턴을 추출하는 함수
     """
     patterns = []
-    patternHashTable = [-1 for _ in range(HASH_MODULO + 1)]
+    patternHashTable = dict()
     for i in range(dim_x):
         for j in range(dim_y):
             for k in range(dim_z):
                 propMatrix = [[[0 for _ in range(MATRIX_Z)] for _ in range(MATRIX_Y)] for _ in range(MATRIX_X)]
                 check = 0
+                usedBlocks = set()
                 for p in range(MATRIX_X):
                     for q in range(MATRIX_Y):
                         for r in range(MATRIX_Z):
@@ -71,18 +98,30 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, inputWorld, inputCache, 
                                 check += 1
                             else:
                                 propMatrix[p][q][r] = blockRegistry[getBlock(x, y, z, inputWorld, inputCache, chunkCache).id]
+                                usedBlocks.add(propMatrix[p][q][r])
                 center_id = blockRegistry[getBlock(i, j, k, inputWorld, inputCache, chunkCache).id]
                 
                 # 범위 밖 공간을 포함하는 패턴 필터링
                 if check != 0: continue
                 
                 # 패턴 중심 블록이 공기 블록일 경우 와일드카드 패턴으로 대체
-                if center_id == blockRegistry['air']:
+                #if center_id == blockRegistry['air']:
+                #    for p in range(MATRIX_X):
+                #        for q in range(MATRIX_Y):
+                #            for r in range(MATRIX_Z):
+                #                if propMatrix[p][q][r] != blockRegistry['air']:
+                #                    propMatrix[p][q][r] = -1
+                
+                # 패턴 내 벽, 바닥 구성 블록이 등장할 경우 공기 블록으로 대체한 패턴을 같이 등록
+                if len(usedBlocks & excludeBlocks) > 0:
+                    extraPattern = deepcopy(propMatrix)
                     for p in range(MATRIX_X):
                         for q in range(MATRIX_Y):
                             for r in range(MATRIX_Z):
-                                if propMatrix[p][q][r] != blockRegistry['air']:
-                                    propMatrix[p][q][r] = -1
+                                if extraPattern[p][q][r] not in excludeBlocks:
+                                    extraPattern[p][q][r] = blockRegistry['air']
+                    registerPattern(extraPattern, center_id, patterns, patternHashTable)
+                
                 registerPattern(propMatrix, center_id, patterns, patternHashTable)
                 #if center_id != blockRegistry['air']:
                 #    registerPattern(propMatrix, center_id, patterns)
@@ -124,10 +163,10 @@ def registerPattern(matrix, center_id, patterns, patternHashTable):
                 rotated270[x3][y][z3] = matrix[x][y][z]
     rotatedSet = [matrix, rotated90, rotated180, rotated270]
     
-    # 패턴 중복 제거
+    # 패턴 등록 및 중복 제거
     for extractedPattern in rotatedSet:
         hashValue = patternHash(extractedPattern)
-        if patternHashTable[hashValue] > -1:
+        if hashValue in patternHashTable:
             patterns[patternHashTable[hashValue]].count += 1
         else:
             patternHashTable[hashValue] = len(patterns)
@@ -159,8 +198,10 @@ def writeMCA(dim_x, dim_y, dim_z, matrix:list[list[list]], blockRegistryInv, epo
         for y in range(dim_y):
             for z in range(dim_z):
                 block_id = matrix[x][y][z]
-                if block_id == -1: outputWorld.set_block(barrier, x, y, z)
-                else: outputWorld.set_block(blockClass[block_id], x, y, z)
+                if block_id < 0:
+                    outputWorld.set_block(barrier, x, y, z)
+                else:
+                    outputWorld.set_block(blockClass[block_id], x, y, z)
     if epoch == 0:
         outputWorld.save(OUTPUT_DIR + 'r.0.0.mca')
     else:

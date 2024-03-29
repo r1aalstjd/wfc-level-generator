@@ -1,6 +1,7 @@
 import anvil, time, random, numpy as np
 import wfcModel, mcaFileIO
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, INPUT_DIR, OUTPUT_DIR
+from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADAJACENT_WALL, FILTER_ADAJACENT_FLOOR
 from heuristicConfig import COMPLEXITY, ENTRY_POS, POS_MASK_SIZE, NODE_DIST_MAX, CUBOID_PADDING, EDGE_MAX_DY, EDGE_MAX_SLOPE
 from wfcModel import wfcModel, Node, Pattern
 
@@ -21,8 +22,10 @@ DIM_Z = SIZE_Z
 
 BLOCK_REGISTRY = {}
 BLOCK_REGISTRY_INV = []
-EXCLUDE_BLOCK_STRING_ID = ['bedrock', 'air', 'gray_wool', 'light_gray_wool', 'black_wool']
+EXCLUDE_BLOCK_STRING_ID = ['bedrock', 'gray_wool', 'light_gray_wool', 'black_wool']
 EXCLUDE_BLOCK_ID = set()
+FLOOR_ADJACENT_FILTER = set()
+WALL_ADJACENT_FILTER = set()
 PATTERNS = []
 INF = 2147483647
 
@@ -32,14 +35,16 @@ def mcaInitializer():
     """
         월드 파일을 읽고 블록 레지스트리 등록, 패턴 추출 수행
     """
-    global DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, BLOCK_REGISTRY, BLOCK_REGISTRY_INV, PATTERNS, EXCLUDE_BLOCK_STRING_ID, EXCLUDE_BLOCK_ID
+    global DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, BLOCK_REGISTRY, BLOCK_REGISTRY_INV, PATTERNS
+    global EXCLUDE_BLOCK_STRING_ID, EXCLUDE_BLOCK_ID, FLOOR_ADJACENT_FILTER, WALL_ADJACENT_FILTER
     timestamp = time.time()
     DIM_Y = mcaFileIO.getMaxY(inputWorld)
     inputCache = [[[-1 for _ in range(DIM_Z)] for _ in range(DIM_Y)] for _ in range(DIM_X)]
     BLOCK_REGISTRY, BLOCK_REGISTRY_INV = mcaFileIO.registerBlocks(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, timestamp)
     for block_id in EXCLUDE_BLOCK_STRING_ID:
         EXCLUDE_BLOCK_ID.add(BLOCK_REGISTRY[block_id])
-    PATTERNS = mcaFileIO.extractPatterns(DIM_X, DIM_Y, DIM_Z, BLOCK_REGISTRY, inputWorld, inputCache, chunkCache, timestamp)
+    FLOOR_ADJACENT_FILTER, WALL_ADJACENT_FILTER = mcaFileIO.extractFilterWhitelist(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, BLOCK_REGISTRY, BLOCK_REGISTRY['black_wool'], BLOCK_REGISTRY['gray_wool'])
+    PATTERNS = mcaFileIO.extractPatterns(DIM_X, DIM_Y, DIM_Z, BLOCK_REGISTRY, EXCLUDE_BLOCK_ID, inputWorld, inputCache, chunkCache, timestamp)
 
 def levelInitializer():
     global DIM_X, DIM_Y, DIM_Z, initLevel, BLOCK_REGISTRY
@@ -95,7 +100,7 @@ def selectNodes():
                     posMask[x][y][z] = 1
                     possiblePos -= 1
     
-    entryPosition = ((0, ENTRY_POS, DIM_Z // 2), (DIM_X - 1, ENTRY_POS, DIM_Z // 2), (DIM_X // 2, ENTRY_POS, 0), (DIM_X // 2, ENTRY_POS, DIM_Z - 1))
+    entryPosition = ((1, ENTRY_POS, DIM_Z // 2), (DIM_X - 2, ENTRY_POS, DIM_Z // 2), (DIM_X // 2, ENTRY_POS, 1), (DIM_X // 2, ENTRY_POS, DIM_Z - 2))
     for x, y, z in entryPosition:
         nodeList.append((x, y, z))
         maskedCount = maskPosition(x, y, z, posMask)
@@ -127,7 +132,6 @@ def maskPosition(p, q, r, posMask):
     for i in range(POS_MASK_SIZE):
         for j in range(POS_MASK_SIZE):
             for k in range(POS_MASK_SIZE):
-                
                 x = p - pos_offset + i
                 y = q - pos_offset + j
                 z = r - pos_offset + k
@@ -218,12 +222,12 @@ def getCuboid(idx1, idx2):
     if x1 > x2: x1, x2 = x2, x1
     if y1 > y2: y1, y2 = y2, y1
     if z1 > z2: z1, z2 = z2, z1
-    x1 = min(DIM_X - 1, max(0, x1 - CUBOID_PADDING))
-    x2 = min(DIM_X - 1, max(0, x2 + CUBOID_PADDING))
-    y1 = min(DIM_Y - 1, max(0, y1 - CUBOID_PADDING))
-    y2 = min(DIM_Y - 1, max(0, y2 + CUBOID_PADDING))
-    z1 = min(DIM_Z - 1, max(0, z1 - CUBOID_PADDING))
-    z2 = min(DIM_Z - 1, max(0, z2 + CUBOID_PADDING))
+    x1 = min(DIM_X - 2, max(1, x1 - CUBOID_PADDING))
+    x2 = min(DIM_X - 2, max(1, x2 + CUBOID_PADDING))
+    y1 = min(DIM_Y - 2, max(1, y1 - CUBOID_PADDING))
+    y2 = min(DIM_Y - 2, max(1, y2 + CUBOID_PADDING))
+    z1 = min(DIM_Z - 2, max(1, z1 - CUBOID_PADDING))
+    z2 = min(DIM_Z - 2, max(1, z2 + CUBOID_PADDING))
     return x1, y1, z1, x2, y2, z2
 
 def createLevel():
@@ -232,19 +236,19 @@ def createLevel():
     """
     global initLevel, nodeList, edgeSet
     edgeList = list(edgeSet)
+    
     # 간선의 비용을 기준으로 오름차순 정렬
     edgeList.sort(key=lambda x: x[3])
+    
     for edge in edgeList:
         idx1, idx2, d, cost = edge
         constructPath(idx1, idx2)
         
         if True: break
 
-def applyPatternFilter(x, y, z, mask):
+def apply3x3Filter(x, y, z, mask):
     """
-        파동함수의 지정된 좌표에 패턴 필터 적용
-        -2  - 공기 블록만 받아들이는 필터
-        -3  - 공기 블록이 아닌 것만 받아들이는 필터
+        파동함수의 지정된 좌표를 중심으로 XZ 평면상의 3 by 3 구역에 패턴 필터 적용
     """
     global initLevel
     if initLevel[x][y][z] == -1: initLevel[x][y][z] = mask
@@ -262,7 +266,7 @@ def constructPath(idx1, idx2):
     """
     global initLevel, nodeList
     x1, y1, z1, x2, y2, z2 = getCuboid(idx1, idx2)
-    y1 = 0
+    y1 = 1
     
     # 경로를 생성할 구역 기준 노드의 상대 좌표를 저장
     nodeRelativeCoords = []
@@ -271,22 +275,35 @@ def constructPath(idx1, idx2):
         nodeRelativeCoords.append((p - x1, q - y1, r - z1))
         if p == 0 or p == DIM_X-1 or r == 0 or r == DIM_Z-1:
             continue
-        applyPatternFilter(p, q, r, -3)
-        applyPatternFilter(p, q+1, r, BLOCK_REGISTRY['air'])
+        apply3x3Filter(p, q, r, FILTER_PLATFORM)
+        apply3x3Filter(p, q+1, r, FILTER_AIR)
     
     pathSegment = np.array(initLevel)
     pathSegment = pathSegment[x1:x2+1, y1:y2+1, z1:z2+1]
     pathSegment = list(pathSegment)
     seg_x, seg_y, seg_z = x2-x1+1, y2-y1+1, z2-z1+1
+    
+    # 전체 레벨 상에서 벽 또는 바닥에 인접한 좌표에 필터 적용
     for x in range(seg_x):
         for y in range(seg_y):
             for z in range(seg_z):
-                if x == 0 or x == seg_x-1 or y == 0 or y == seg_y-1 or z == 0 or z == seg_z-1:
-                    if pathSegment[x][y][z] == -1: pathSegment[x][y][z] = BLOCK_REGISTRY['air']
+                i, j, k = x + x1, y + y1, z + z1
+                if pathSegment[x][y][z] == -1:
+                    if i == 1 or i == DIM_X-2 or k == 1 or k == DIM_Z-2:
+                        pathSegment[x][y][z] = FILTER_ADAJACENT_WALL
+                    if j == 1:
+                        pathSegment[x][y][z] = FILTER_ADAJACENT_FLOOR
     
-    # 파동함수 붕괴 모델 초기화 및 경로 생성
-    generatorModel = wfcModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY, excludeBlocks=EXCLUDE_BLOCK_ID, priortizedCoords=nodeRelativeCoords)
+    # WFC 알고리즘 모델 초기화 및 경로 생성
+    generatorModel = wfcModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY,
+                                excludeBlocks=EXCLUDE_BLOCK_ID, floorAdjacentFilter=FLOOR_ADJACENT_FILTER, wallAdjacentFilter=WALL_ADJACENT_FILTER,
+                                priortizedCoords=nodeRelativeCoords)
     pathSegment = generatorModel.generate()
+    
+    if pathSegment is None: assert(0)
+    mcaFileIO.writeMCA(seg_x, seg_y, seg_z, pathSegment, BLOCK_REGISTRY_INV, epoch=1)
+    
+    # 생성된 구조물 Ctrl + C Ctrl + V
     for x in range(x1, x2+1):
         for y in range(y1, y2+1):
             for z in range(z1, z2+1):
@@ -307,3 +324,8 @@ if __name__ == "__main__":
     #            debugWorld.write('{:>2} '.format(initLevel[x][y][z]))
     #        debugWorld.write('\n')
     #    debugWorld.write('\n')
+
+"""
+    TODO
+    - 플레이어 동선 그래프 구성 시 Y 좌표 값이 높은 노드가 더 적게 생성되도록 수정
+"""

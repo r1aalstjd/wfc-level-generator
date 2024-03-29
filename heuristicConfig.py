@@ -8,13 +8,13 @@ POS_MASK_SIZE = 7
 ENTRY_POS = 1
 
 # 플레이어 동선 그래프 상에서 정점 사이 최대 거리
-NODE_DIST_MAX = 15
+NODE_DIST_MAX = 10
 
 # 두 정점 간의 구조물 생성 시 정점 좌표로 결정되는 직육면체 패딩 범위
-CUBOID_PADDING = 3
+CUBOID_PADDING = 2
 
 # 플레이어 동선 그래프 상에서 두 정점의 최대 높이 차
 EDGE_MAX_DY = 6
 
 # 플레이어 동선 그래프 상에서 간선의 최대 경사
-EDGE_MAX_SLOPE = 1.0
+EDGE_MAX_SLOPE = 0.5
