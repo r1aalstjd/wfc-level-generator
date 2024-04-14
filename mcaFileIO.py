@@ -205,7 +205,7 @@ def writeMCA(dim_x, dim_y, dim_z, matrix:list[list[list]], blockRegistryInv, epo
     if epoch == 0:
         outputWorld.save(OUTPUT_DIR + 'r.0.0.mca')
     else:
-        outputWorld.save(OUTPUT_DIR + '{} r.0.0.mca'.format(epoch+1))
+        outputWorld.save(OUTPUT_DIR + '{} r.0.0.mca'.format(epoch))
 
 if __name__ == "__main__":
     pass

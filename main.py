@@ -240,11 +240,21 @@ def createLevel():
     # 간선의 비용을 기준으로 오름차순 정렬
     edgeList.sort(key=lambda x: x[3])
     
+    edgeCount = 0
     for edge in edgeList:
         idx1, idx2, d, cost = edge
-        constructPath(idx1, idx2)
+        pathSegment, x1, y1, z1, x2, y2, z2 = constructPath(idx1, idx2)
         
         if True: break
+        #if pathSegment != None:
+        #    print("Path constructed. ({}/{})".format(edgeCount+1, len(edgeList)))
+        #    # 생성된 구조물 Ctrl + C Ctrl + V
+        #    for x in range(x1, x2+1):
+        #        for y in range(y1, y2+1):
+        #            for z in range(z1, z2+1):
+        #                initLevel[x][y][z] = pathSegment[x-x1][y-y1][z-z1]
+        #edgeCount += 1
+    return initLevel
 
 def apply3x3Filter(x, y, z, mask):
     """
@@ -289,8 +299,10 @@ def constructPath(idx1, idx2):
             for z in range(seg_z):
                 i, j, k = x + x1, y + y1, z + z1
                 if pathSegment[x][y][z] == -1:
-                    if i == 1 or i == DIM_X-2 or k == 1 or k == DIM_Z-2:
-                        pathSegment[x][y][z] = FILTER_ADAJACENT_WALL
+                    if x == 0 or x == seg_x-1 or z == 0 or z == seg_z-1:
+                        pathSegment[x][y][z] = FILTER_ADAJACENT_WALL    
+                    #if i == 1 or i == DIM_X-2 or k == 1 or k == DIM_Z-2:
+                    #    pathSegment[x][y][z] = FILTER_ADAJACENT_WALL
                     if j == 1:
                         pathSegment[x][y][z] = FILTER_ADAJACENT_FLOOR
     
@@ -300,23 +312,21 @@ def constructPath(idx1, idx2):
                                 priortizedCoords=nodeRelativeCoords)
     pathSegment = generatorModel.generate()
     
-    if pathSegment is None: assert(0)
-    mcaFileIO.writeMCA(seg_x, seg_y, seg_z, pathSegment, BLOCK_REGISTRY_INV, epoch=1)
-    
-    # 생성된 구조물 Ctrl + C Ctrl + V
-    for x in range(x1, x2+1):
-        for y in range(y1, y2+1):
-            for z in range(z1, z2+1):
-                initLevel[x][y][z] = pathSegment[x-x1][y-y1][z-z1]
+    if pathSegment != None:
+        mcaFileIO.writeMCA(seg_x, seg_y, seg_z, pathSegment, BLOCK_REGISTRY_INV, epoch=1)
+    return pathSegment, x1, y1, z1, x2, y2, z2
 
 if __name__ == "__main__":
+    timestamp = time.time()
     mcaInitializer()
     levelInitializer()
     print(BLOCK_REGISTRY)
     selectNodes()
     movementGraph = createMovementGraph(nodeList)
     
-    createLevel()
+    level = createLevel()
+    mcaFileIO.writeMCA(DIM_X, DIM_Y, DIM_Z, level, BLOCK_REGISTRY_INV)
+    print("Level generation completed. (took {}s)".format(round(time.time() - timestamp, 6)))
     #debugWorld = open('./Debug/debugWorld.txt', 'w+')
     #for y in range(DIM_Y):
     #    for x in range(DIM_X):

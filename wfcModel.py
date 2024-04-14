@@ -22,8 +22,6 @@ class wfcModel:
         self.dim_y = dim_y
         self.dim_z = dim_z
         
-        print(priortizedCoords)
-        
         self.patterns = patterns
         self.blockRegistry = blockRegistry
         self.excludeBlocks = excludeBlocks
@@ -42,9 +40,9 @@ class wfcModel:
         self.entropyInitializer()
         self.waveFunctionInitializer(initWave=initWave)
         
-        self.debugOutput('./modelInitDebug/world.txt', 'w+')
-        self.debugStateCell('./modelInitDebug/statecell.txt', 'w+')
-        self.debugEntropy('./modelInitDebug/entropy.txt', 'w+')
+        #self.debugOutput('./modelInitDebug/world.txt', 'w+')
+        #self.debugStateCell('./modelInitDebug/statecell.txt', 'w+')
+        #self.debugEntropy('./modelInitDebug/entropy.txt', 'w+')
     
     def debugOutput(self, dir, mode = 'w+', coord = None):
         """
@@ -102,7 +100,6 @@ class wfcModel:
         # 플레이어 동선 그래프의 정점 위치에 해당하는 노드 우선 붕괴 및 전파
         for coord in self.prioritizedCoords:
             x, y, z = coord
-            print(x, y, z, "prioritized")
             self.waveFunc[x][y][z].collapse(x, y, z)
             self.waveFunc[x][y][z].propagate(x, y, z, self.nodeUpdateStack)
         
@@ -129,15 +126,15 @@ class wfcModel:
         self.updateNodes()
         self.updateStateCell()
         x, y, z = self.findLeastEntropy()
-        print('{:>2} {:>2} {:>2} {:>4}'.format(x, y, z, step))
+        #print('{:>2} {:>2} {:>2} {:>4}'.format(x, y, z, step))
         if x == -1:
             return 0
         self.waveFunc[x][y][z].prohibitState(x, y, z)
         self.waveFunc[x][y][z].collapse(x, y, z)
         self.waveFunc[x][y][z].propagate(x, y, z, self.nodeUpdateStack)
         
-        self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
-        self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
+        #self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
+        #self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
         
         return 1
     
@@ -169,7 +166,7 @@ class wfcModel:
             if self.waveFunc[x][y][z].block_id == FILTER_ADAJACENT_FLOOR or self.waveFunc[x][y][z].block_id == FILTER_ADAJACENT_WALL:
                 continue
             if e1 > 0 and e2 > 0 and self.waveFunc[x][y][z].collapsed == 0 and self.waveFunc[x][y][z].isContradicted() == 0:
-                print('{:>4} {:>4} {:>4} | '.format(d, e1, e2), end='')
+                #print('{:>4} {:>4} {:>4} | '.format(d, e1, e2), end='')
                 return (x, y, z)
         # 매트릭스의 모든 원소가 붕괴된 상태
         return (-1, -1, -1)
