@@ -1,9 +1,10 @@
-import anvil, time, random, numpy as np
+import anvil, time, random, numpy as np, os
 import wfcModel, mcaFileIO
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, INPUT_DIR, OUTPUT_DIR
-from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADAJACENT_WALL, FILTER_ADAJACENT_FLOOR
+from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADJACENT_WALL, FILTER_ADJACENT_FLOOR
 from heuristicConfig import COMPLEXITY, ENTRY_POS, POS_MASK_SIZE, NODE_DIST_MAX, CUBOID_PADDING, EDGE_MAX_DY, EDGE_MAX_SLOPE
 from wfcModel import wfcModel, Node, Pattern
+from wfcWeightedModel import wfcWeightedModel
 
 inputWorld = anvil.Region.from_file(INPUT_DIR + 'r.0.0.mca')
 inputCache = []
@@ -100,6 +101,7 @@ def selectNodes():
                     posMask[x][y][z] = 1
                     possiblePos -= 1
     
+    yPosWeight = [(DIM_Y-2-i) for i in range(1, DIM_Y-2)]
     entryPosition = ((1, ENTRY_POS, DIM_Z // 2), (DIM_X - 2, ENTRY_POS, DIM_Z // 2), (DIM_X // 2, ENTRY_POS, 1), (DIM_X // 2, ENTRY_POS, DIM_Z - 2))
     for x, y, z in entryPosition:
         nodeList.append((x, y, z))
@@ -114,7 +116,7 @@ def selectNodes():
         pos_x, pos_y, pos_z = None, None, None
         while True:
             pos_x = random.randint(1, DIM_X-1)
-            pos_y = random.randint(1, DIM_Y-3)
+            pos_y = random.choices(range(1, DIM_Y-2), weights=yPosWeight)[0]
             pos_z = random.randint(1, DIM_Z-1)
             if posMask[pos_x][pos_y][pos_z] == 0: break
         nodeList.append((pos_x, pos_y, pos_z))
@@ -238,7 +240,7 @@ def createLevel():
     edgeList = list(edgeSet)
     
     # 간선의 비용을 기준으로 오름차순 정렬
-    edgeList.sort(key=lambda x: x[3])
+    edgeList.sort(key=lambda x: x[3], reverse=True)
     
     edgeCount = 0
     for edge in edgeList:
@@ -297,19 +299,21 @@ def constructPath(idx1, idx2):
     for x in range(seg_x):
         for y in range(seg_y):
             for z in range(seg_z):
+                if x == 0 or x == seg_x-1 or z == 0 or z == seg_z-1:
+                    pathSegment[x][y][z] = FILTER_ADJACENT_WALL
                 i, j, k = x + x1, y + y1, z + z1
                 if pathSegment[x][y][z] == -1:
                     if x == 0 or x == seg_x-1 or z == 0 or z == seg_z-1:
-                        pathSegment[x][y][z] = FILTER_ADAJACENT_WALL    
-                    #if i == 1 or i == DIM_X-2 or k == 1 or k == DIM_Z-2:
-                    #    pathSegment[x][y][z] = FILTER_ADAJACENT_WALL
+                        pathSegment[x][y][z] = FILTER_ADJACENT_WALL
                     if j == 1:
-                        pathSegment[x][y][z] = FILTER_ADAJACENT_FLOOR
+                        pathSegment[x][y][z] = FILTER_ADJACENT_FLOOR
+                    if i == 1 or i == DIM_X-2 or k == 1 or k == DIM_Z-2:
+                        pathSegment[x][y][z] = FILTER_ADJACENT_WALL
     
     # WFC 알고리즘 모델 초기화 및 경로 생성
-    generatorModel = wfcModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY,
+    generatorModel = wfcWeightedModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY,
                                 excludeBlocks=EXCLUDE_BLOCK_ID, floorAdjacentFilter=FLOOR_ADJACENT_FILTER, wallAdjacentFilter=WALL_ADJACENT_FILTER,
-                                priortizedCoords=nodeRelativeCoords)
+                                priortizedCoords=nodeRelativeCoords, debug=True)
     pathSegment = generatorModel.generate()
     
     if pathSegment != None:
@@ -320,22 +324,21 @@ if __name__ == "__main__":
     timestamp = time.time()
     mcaInitializer()
     levelInitializer()
-    print(BLOCK_REGISTRY)
     selectNodes()
     movementGraph = createMovementGraph(nodeList)
+    
+    # 디버그용 파일 삭제
+    rmTarget = os.listdir('./testOutputs/')
+    for file in rmTarget:
+        os.remove('./testOutputs/' + file)
     
     level = createLevel()
     mcaFileIO.writeMCA(DIM_X, DIM_Y, DIM_Z, level, BLOCK_REGISTRY_INV)
     print("Level generation completed. (took {}s)".format(round(time.time() - timestamp, 6)))
-    #debugWorld = open('./Debug/debugWorld.txt', 'w+')
-    #for y in range(DIM_Y):
-    #    for x in range(DIM_X):
-    #        for z in range(DIM_Z):
-    #            debugWorld.write('{:>2} '.format(initLevel[x][y][z]))
-    #        debugWorld.write('\n')
-    #    debugWorld.write('\n')
 
 """
     TODO
-    - 플레이어 동선 그래프 구성 시 Y 좌표 값이 높은 노드가 더 적게 생성되도록 수정
+    - WFC 모델 가중치 모델로 수정
+    - WFC 실행 시 공기 패턴 붕괴 방지
+    - 정상적인 구조물 생성 유도
 """

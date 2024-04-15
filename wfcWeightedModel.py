@@ -1,9 +1,9 @@
-import random
+import random, math
 from copy import deepcopy
-from constantTable import MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z
+from constantTable import MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, EPSILON
 from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADJACENT_WALL, FILTER_ADJACENT_FLOOR
 
-class wfcModel:
+class wfcWeightedModel:
     """
         dim_x, dim_y, dim_z - WFC 알고리즘을 실행할 공간의 차원 크기
         
@@ -17,7 +17,7 @@ class wfcModel:
         
         prioritizedCoords   - WFC 알고리즘 실행 시 우선적으로 붕괴할 노드의 좌표 리스트
     """
-    def __init__(self, dim_x:int, dim_y:int, dim_z:int, initWave, patterns, blockRegistry, excludeBlocks, floorAdjacentFilter:set[int], wallAdjacentFilter:set[int], priortizedCoords:list[tuple[int, int, int]] = []):
+    def __init__(self, dim_x:int, dim_y:int, dim_z:int, initWave, patterns, blockRegistry, excludeBlocks, floorAdjacentFilter:set[int], wallAdjacentFilter:set[int], priortizedCoords:list[tuple[int, int, int]] = [], debug = False):
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.dim_z = dim_z
@@ -28,6 +28,8 @@ class wfcModel:
         self.prioritizedCoords = priortizedCoords
         self.floorAdjacentFilter = floorAdjacentFilter
         self.wallAdjacentFilter = wallAdjacentFilter
+        
+        self.debugMode = debug
         
         self.nodeUpdateStack = []
         self.stateCellUpdateStack = set()
@@ -40,9 +42,10 @@ class wfcModel:
         #self.entropyInitializer()
         self.waveFunctionInitializer(initWave=initWave)
         
-        #self.debugOutput('./modelInitDebug/world.txt', 'w+')
-        #self.debugStateCell('./modelInitDebug/statecell.txt', 'w+')
-        #self.debugEntropy('./modelInitDebug/entropy.txt', 'w+')
+        if self.debugMode:
+            self.debugOutput('./modelInitDebug/world.txt', 'w+')
+            self.debugStateCell('./modelInitDebug/statecell.txt', 'w+')
+            self.debugEntropy('./modelInitDebug/entropy.txt', 'w+')
     
     def debugOutput(self, dir, mode = 'w+', coord = None):
         """
@@ -114,7 +117,10 @@ class wfcModel:
         #self.debugOutput('./Debug/debugWorld.txt', 'w+')
         
         cont = self.checkContradiction()
-        if cont: return None
+        if cont:
+            print("Contradiction detected.")
+        #if cont: return None
+
         outputFunc = [[[-1 for _ in range(self.dim_z)] for _ in range(self.dim_y)] for _ in range(self.dim_x)]
         for i in range(self.dim_x):
             for j in range(self.dim_y):
@@ -126,15 +132,18 @@ class wfcModel:
         self.updateNodes()
         self.updateStateCell()
         x, y, z = self.findLeastEntropy()
-        #print('{:>2} {:>2} {:>2} {:>4}'.format(x, y, z, step))
+        
+        if self.debugMode:
+            print('{:>2} {:>2} {:>2} {:>4}'.format(x, y, z, step))
         if x == -1:
             return 0
         self.waveFunc[x][y][z].prohibitState(x, y, z)
         self.waveFunc[x][y][z].collapse(x, y, z)
         self.waveFunc[x][y][z].propagate(x, y, z, self.nodeUpdateStack)
         
-        #self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
-        #self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
+        if self.debugMode:
+            self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
+            self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
         
         return 1
     
@@ -159,14 +168,16 @@ class wfcModel:
                     if self.waveFunc[i][j][k].collapsed == 0 and self.waveFunc[i][j][k].isContradicted() == 0:
                         coords.append((dist, nodeEntropy, i, j, k))
         
-        # 정렬 기준: 엔트로피 -> 좌표
+        # 정렬 기준: 엔트로피 -> 우선순위 좌표까지의 거리
         coords.sort(key=lambda x:(x[1], x[0]))
         
         for d, e1, x, y, z in coords:
+            if self.waveFunc[x][y][z].block_id == -1:
+                continue
             if self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_FLOOR or self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_WALL:
                 continue
-            if e1 > 0 and self.waveFunc[x][y][z].collapsed == 0 and self.waveFunc[x][y][z].isContradicted() == 0:
-                #print('{:>4} {:>4} {:>4} | '.format(d, e1, e2), end='')
+            if e1 > random.random() * EPSILON and self.waveFunc[x][y][z].collapsed == 0 and self.waveFunc[x][y][z].isContradicted() == 0:
+                if self.debugMode: print('{:>4} {:>10} | '.format(d, round(e1, 6)), end='')
                 return (x, y, z)
         # 매트릭스의 모든 원소가 붕괴된 상태
         return (-1, -1, -1)
@@ -201,24 +212,6 @@ class wfcModel:
                         else:
                             return 1
         return 0
-    
-    """
-    def entropyInitializer(self):
-        
-            파동 함수 내 모든 노드의 패턴 엔트로피 초기화 함수
-        
-        for x in range(self.dim_x):
-            for y in range(self.dim_y):
-                for z in range(self.dim_z):
-                    entropy = 0
-                    for p in range(MATRIX_X):
-                        for q in range(MATRIX_Y):
-                            for r in range(MATRIX_Z):
-                                i, j, k = x - OFF_X + p, y - OFF_Y + q, z - OFF_Z + r
-                                if i < 0 or j < 0 or k < 0 or i >= self.dim_x or j >= self.dim_y or k >= self.dim_z: continue
-                                entropy += self.waveFunc[i][j][k].entropy
-                    self.waveFunc[x][y][z].pattern_entropy = entropy
-    """
     
     def waveFunctionInitializer(self, initWave):
         """
@@ -258,7 +251,7 @@ class wfcModel:
         #self.debugStateCell('./testStateCell/init1.txt', 'w+')
 
 class Node:
-    def __init__(self, dim_x:int, dim_y:int, dim_z:int, states = [], model:wfcModel = None):
+    def __init__(self, dim_x:int, dim_y:int, dim_z:int, states = [], model:wfcWeightedModel = None):
         self.states = deepcopy(states)
         self.block_id = -1
         self.pattern_id = -1
@@ -294,6 +287,30 @@ class Node:
     def getEntropy(self):
         return self.entropy
     
+    def updateEntropy(self):
+        """
+            엔트로피 값을 업데이트하는 함수 (상태 배열 업데이트 필요)
+            
+            Entropy = -\sigma{p(x)log(p(x))}
+            p(x)        = w / sum
+            log(p(x))   = log(w/sum)    = log(w) - log(sum)
+            ->  w / sum * (log(sum) - log(w))
+            ->  w / sum * log(sum) - w / sum * log(w)
+            ->  w * log(sum) / sum - w * log(w) / sum
+        """
+        weightSum = 0
+        entropy = 0
+        for i in range(self.patternCount):
+            if self.states[i] != 0:
+                weightSum += self.model.patterns[i].count
+        for i in range(self.patternCount):
+            if self.states[i] != 0:
+                w = self.model.patterns[i].count
+                px = (w / weightSum)
+                entropy -= px * math.log2(px)
+        self.entropy = entropy
+        return self.entropy
+    
     def setBlockID(self, block_id, x, y, z):
         """
             파동 함수 초기화 시 현재 노드의 블록 상태를 지정하는 함수.
@@ -310,8 +327,10 @@ class Node:
     def setFilter(self, pattern_id, x, y, z):
         """
             파동 함수 초기화 시 현재 노드에 필터를 적용하는 함수.
-            -2  - 공기 블록만 받아들이는 필터
-            -3  - 공기 블록이 아닌 것만 받아들이는 필터
+            FILTER_AIR              - 공기 블록만 받아들이는 필터
+            FILTER_PLATFORM         - 공기 블록이 아닌 것만 받아들이는 필터
+            FILTER_ADJACENT_FLOOR   - 바닥 블록과 인접한 블록만 받아들이는 필터
+            FILTER_ADJACENT_WALL    - 벽 블록과 인접한 블록만 받아들이는 필터
         """
         self.block_id = pattern_id
         if pattern_id == FILTER_AIR:
@@ -341,14 +360,18 @@ class Node:
             매트릭스 상에서 현재 노드의 중첩 상태를 임의의 정해진 상태로 붕괴시키는 함수.
         """
         possiblePatterns = []
+        patternWeights = []
         self.entropy = 0
         self.collapsed = 1
         
         # 현재 노드의 중첩 상태를 하나의 상태로 붕괴
         for i in range(self.patternCount):
-            if self.states[i] != 0: possiblePatterns.append(i)
+            if self.states[i] != 0:
+                possiblePatterns.append(i)
+                patternWeights.append(self.model.patterns[i].count)
         if len(possiblePatterns) == 0: return
-        collapsed_id = random.choice(possiblePatterns)
+        
+        collapsed_id = random.choices(possiblePatterns, weights=patternWeights)[0]
         
         # 현재 노드의 상태를 붕괴된 상태로 설정
         self.pattern_id = collapsed_id
@@ -502,17 +525,7 @@ class Node:
         
         #f.close()
 
-        self.entropy -= entropyDelta
-    
-    """
-    def propagateDelta(self, delta, x, y, z):
-        for p in range(MATRIX_X):
-            for q in range(MATRIX_Y):
-                for r in range(MATRIX_Z):
-                    i, j, k = self.getAbsoluteCoord(x, y, z, p, q, r)
-                    if i < 0 or j < 0 or k < 0 or i >= self.dim_x or j >= self.dim_y or k >= self.dim_z: continue
-                    self.model.waveFunc[i][j][k].pattern_entropy -= delta
-    """
+        self.updateEntropy()
 
 class Pattern:
     def __init__(self, state = [], center_id = -1, count = 0):

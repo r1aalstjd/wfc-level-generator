@@ -3,9 +3,6 @@ from copy import deepcopy
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, INPUT_DIR, OUTPUT_DIR, HASH_MODULO
 from wfcModel import Pattern
 
-#inputWorld = anvil.Region.from_file(INPUT_DIR + 'r.0.0.mca')
-#inputCache = []
-
 def getMaxY(inputWorld):
     for i in range(1000):
         if anvil.Chunk.from_region(inputWorld, 0, 0).get_block(0, i, 0).id == 'air':
@@ -13,7 +10,7 @@ def getMaxY(inputWorld):
     else:
         return 0
 
-def getBlock(x, y, z, inputWorld, inputCache, chunkCache):
+def getBlock(x, y, z, inputWorld, inputCache, chunkCache) -> anvil.Block:
     """
         실제 월드에서의 (x, y, z) 좌표에 위치한 블록 객체를 반환하는 함수.
     """
@@ -97,12 +94,17 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, excludeBlocks, inputWorl
                                 propMatrix[p][q][r] = -1
                                 check += 1
                             else:
-                                propMatrix[p][q][r] = blockRegistry[getBlock(x, y, z, inputWorld, inputCache, chunkCache).id]
+                                block_id = blockRegistry[getBlock(x, y, z, inputWorld, inputCache, chunkCache).id]
+                                propMatrix[p][q][r] = block_id
                                 usedBlocks.add(propMatrix[p][q][r])
                 center_id = blockRegistry[getBlock(i, j, k, inputWorld, inputCache, chunkCache).id]
                 
-                # 범위 밖 공간을 포함하는 패턴 필터링
+                # 범위 밖 공간을 포함하는 패턴 등록 제외
                 if check != 0: continue
+                
+                # 패턴 중심 블록이 공기 블록일 경우 등록 제외
+                if center_id == blockRegistry['air']:
+                    continue
                 
                 # 패턴 중심 블록이 공기 블록일 경우 와일드카드 패턴으로 대체
                 #if center_id == blockRegistry['air']:
@@ -113,18 +115,16 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, excludeBlocks, inputWorl
                 #                    propMatrix[p][q][r] = -1
                 
                 # 패턴 내 벽, 바닥 구성 블록이 등장할 경우 공기 블록으로 대체한 패턴을 같이 등록
-                if len(usedBlocks & excludeBlocks) > 0:
-                    extraPattern = deepcopy(propMatrix)
-                    for p in range(MATRIX_X):
-                        for q in range(MATRIX_Y):
-                            for r in range(MATRIX_Z):
-                                if extraPattern[p][q][r] not in excludeBlocks:
-                                    extraPattern[p][q][r] = blockRegistry['air']
-                    registerPattern(extraPattern, center_id, patterns, patternHashTable)
+                #if len(usedBlocks & excludeBlocks) > 0:
+                #    extraPattern = deepcopy(propMatrix)
+                #    for p in range(MATRIX_X):
+                #        for q in range(MATRIX_Y):
+                #            for r in range(MATRIX_Z):
+                #                if extraPattern[p][q][r] not in excludeBlocks:
+                #                    extraPattern[p][q][r] = blockRegistry['air']
+                #    registerPattern(extraPattern, center_id, patterns, patternHashTable)
                 
                 registerPattern(propMatrix, center_id, patterns, patternHashTable)
-                #if center_id != blockRegistry['air']:
-                #    registerPattern(propMatrix, center_id, patterns)
     
     #propMatrix = [[[0 for _ in range(MATRIX_Z)] for _ in range(MATRIX_Y)] for _ in range(MATRIX_X)]
     #for p in range(MATRIX_X):
