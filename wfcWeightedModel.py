@@ -2,6 +2,7 @@ import random, math
 from copy import deepcopy
 from constantTable import MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, EPSILON
 from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADJACENT_WALL, FILTER_ADJACENT_FLOOR
+from animatedVisualizer import animatedVisualizer
 
 class wfcWeightedModel:
     """
@@ -17,7 +18,8 @@ class wfcWeightedModel:
         
         prioritizedCoords   - WFC 알고리즘 실행 시 우선적으로 붕괴할 노드의 좌표 리스트
     """
-    def __init__(self, dim_x:int, dim_y:int, dim_z:int, initWave, patterns, blockRegistry, excludeBlocks, floorAdjacentFilter:set[int], wallAdjacentFilter:set[int], priortizedCoords:list[tuple[int, int, int]] = [], debug = False):
+    def __init__(self, dim_x:int, dim_y:int, dim_z:int, initWave, patterns, blockRegistry, excludeBlocks,
+                floorAdjacentFilter:set[int], wallAdjacentFilter:set[int], priortizedCoords:list[tuple[int, int, int]] = [], debug = False):
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.dim_z = dim_z
@@ -43,9 +45,18 @@ class wfcWeightedModel:
         self.waveFunctionInitializer(initWave=initWave)
         
         if self.debugMode:
+            self.debugFrames = []
             self.debugOutput('./modelInitDebug/world.txt', 'w+')
             self.debugStateCell('./modelInitDebug/statecell.txt', 'w+')
             self.debugEntropy('./modelInitDebug/entropy.txt', 'w+')
+    
+    def debugWriteFrame(self, x, y, z):
+        frame = [[[0 for _ in range(self.dim_z)] for _ in range(self.dim_y)] for _ in range(self.dim_x)]
+        for x in range(self.dim_x):
+            for y in range(self.dim_y):
+                for z in range(self.dim_z):
+                    frame[x][y][z] = self.waveFunc[x][y][z].block_id
+        self.debugFrames.append((frame, x, y, z))
     
     def debugOutput(self, dir, mode = 'w+', coord = None):
         """
@@ -116,6 +127,8 @@ class wfcWeightedModel:
         
         #self.debugOutput('./Debug/debugWorld.txt', 'w+')
         
+        if self.debugMode:
+            animatedVisualizer(self.debugFrames, list(self.blockRegistry.keys()), './Debug/Visualization/', 'world.gif', interval=500, elev=22.5, azim=-135, roll=0)
         cont = self.checkContradiction()
         if cont:
             print("Contradiction detected.")
@@ -142,6 +155,7 @@ class wfcWeightedModel:
         self.waveFunc[x][y][z].propagate(x, y, z, self.nodeUpdateStack)
         
         if self.debugMode:
+            self.debugWriteFrame(x, y, z)
             self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
             self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
         
