@@ -98,7 +98,7 @@ class wfcWeightedModel:
         for y in range(self.dim_y):
             for x in range(self.dim_x):
                 for z in range(self.dim_z):
-                    debugWorld.write('{:>3} '.format(self.waveFunc[x][y][z].entropy))
+                    debugWorld.write('{:>5} '.format(self.waveFunc[x][y][z].weightSum))
                 debugWorld.write('\n')
             debugWorld.write('\n')
         debugWorld.close()
@@ -117,6 +117,9 @@ class wfcWeightedModel:
             self.waveFunc[x][y][z].collapse(x, y, z)
             self.waveFunc[x][y][z].propagate(x, y, z, self.nodeUpdateStack)
         
+        if self.debugMode:
+            self.debugWriteFrame(-1, -1, -1)
+        
         # WFC 알고리즘 실행
         step = 0
         while True:
@@ -128,7 +131,8 @@ class wfcWeightedModel:
         #self.debugOutput('./Debug/debugWorld.txt', 'w+')
         
         if self.debugMode:
-            animatedVisualizer(self.debugFrames, list(self.blockRegistry.keys()), './Debug/Visualization/', 'world.gif', interval=500, elev=22.5, azim=-135, roll=0)
+            animatedVisualizer(self.debugFrames, list(self.blockRegistry.keys()), 
+                            './Debug/Visualization/', 'world.gif', interval=200, elev=22.5, azim=-135, roll=0)
         cont = self.checkContradiction()
         if cont:
             print("Contradiction detected.")
@@ -157,18 +161,18 @@ class wfcWeightedModel:
         if self.debugMode:
             self.debugWriteFrame(x, y, z)
             self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
-            self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
+            #self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
         
         return 1
     
-    def calculateEntropy(self, x, y, z):
-        nodeEntropy = self.waveFunc[x][y][z].getEntropy()
+    def calculateEntropy(self, x:int, y:int, z:int):
+        nodeEntropy, weightSum = self.waveFunc[x][y][z].getEntropy()
         distMin = 2147483647
         for coord in self.prioritizedCoords:
             p, q, r = coord
             distSquared = (x - p) * (x - p) + (y - q) * (y - q) + (z - r) * (z - r)
             distMin = min(distMin, distSquared)
-        return distMin, nodeEntropy
+        return distMin, nodeEntropy, weightSum
     
     def findLeastEntropy(self) -> tuple[int, int, int]:
         """
@@ -178,21 +182,23 @@ class wfcWeightedModel:
         for i in range(self.dim_x):
             for j in range(self.dim_y):
                 for k in range(self.dim_z):
-                    dist, nodeEntropy = self.calculateEntropy(i, j, k)
+                    dist, nodeEntropy, weightSum = self.calculateEntropy(i, j, k)
                     if self.waveFunc[i][j][k].collapsed == 0 and self.waveFunc[i][j][k].isContradicted() == 0:
-                        coords.append((dist, nodeEntropy, i, j, k))
+                        coords.append((dist, nodeEntropy, weightSum, i, j, k))
         
         # 정렬 기준: 엔트로피 -> 우선순위 좌표까지의 거리
         coords.sort(key=lambda x:(x[1], x[0]))
         
-        for d, e1, x, y, z in coords:
-            if self.waveFunc[x][y][z].block_id == -1:
+        for d, e1, wsum, x, y, z in coords:
+            # 벽, 바닥 인접 패턴 및 빈 공간에 해당하는 노드 붕괴 방지
+            if self.waveFunc[x][y][z].block_id == -1 or self.waveFunc[x][y][z].block_id == self.blockRegistry['air']:
                 continue
             if self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_FLOOR or self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_WALL:
                 continue
-            if e1 > random.random() * EPSILON and self.waveFunc[x][y][z].collapsed == 0 and self.waveFunc[x][y][z].isContradicted() == 0:
+            if wsum > 0 and self.waveFunc[x][y][z].collapsed == 0 and self.waveFunc[x][y][z].isContradicted() == 0:
                 if self.debugMode: print('{:>4} {:>10} | '.format(d, round(e1, 6)), end='')
                 return (x, y, z)
+        
         # 매트릭스의 모든 원소가 붕괴된 상태
         return (-1, -1, -1)
     
@@ -272,16 +278,17 @@ class Node:
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.dim_z = dim_z
+        self.model = model
+        self.patternCount = len(self.model.patterns)
+        self.blockCount = len(self.model.blockRegistry)
         
-        self.entropy = len(self.states)
+        self.entropy = 0
+        self.weightSum = 0
+        self.updateEntropy()
         self.collapsed = 0
         self.isCovered = 0
         
-        self.model = model
-        
         self.coverCheckIndex = ((0, 0, 1), (0, 0, -1), (0, 1, 0), (0, -1, 0), (1, 0, 0), (-1, 0, 0))
-        self.patternCount = len(self.model.patterns)
-        self.blockCount = len(self.model.blockRegistry)
         
         # 상태 셀 -> 파동 함수에서 주변 노드의 가능한 블록 상태 수를 저장하는 배열
         self.stateCache = [[[self.blockCount for _ in range(MATRIX_Z)] for _ in range(MATRIX_Y)] for _ in range(MATRIX_X)]
@@ -299,7 +306,7 @@ class Node:
         return 0
     
     def getEntropy(self):
-        return self.entropy
+        return self.entropy, self.weightSum
     
     def updateEntropy(self):
         """
@@ -322,6 +329,7 @@ class Node:
                 w = self.model.patterns[i].count
                 px = (w / weightSum)
                 entropy -= px * math.log2(px)
+        self.weightSum = weightSum
         self.entropy = entropy
         return self.entropy
     
@@ -337,6 +345,7 @@ class Node:
         self.collapsed = 1
         self.model.stateCell[x][y][z] = {block_id}
         self.entropy = 0
+        self.weightSum = 0
     
     def setFilter(self, pattern_id, x, y, z):
         """
@@ -376,6 +385,7 @@ class Node:
         possiblePatterns = []
         patternWeights = []
         self.entropy = 0
+        self.weightSum = 0
         self.collapsed = 1
         
         # 현재 노드의 중첩 상태를 하나의 상태로 붕괴

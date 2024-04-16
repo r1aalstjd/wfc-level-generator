@@ -34,6 +34,7 @@ class animatedVisualizer:
         
         self.frameData = frameData
         self.blockRegistryInv = blockRegistryInv
+        self.blockCount = len(blockRegistryInv)
         
         self.cubeVertices = np.array([
             [1.0, 1.0, 1.0],
@@ -90,6 +91,7 @@ class animatedVisualizer:
         
         anim = FuncAnimation(fig, self.drawFrame, frames=self.frameCount, interval=interval)
         anim.save(dir + filename, writer='pillow')
+        plt.show()
     
     def drawFrame(self, frame:int):
         self.ax.clear()
@@ -102,20 +104,23 @@ class animatedVisualizer:
         
         #self.ax.view_init(elev=self.rotV, azim=self.rotH)
         
-        frameData = self.frameData[frame][0]
-        coord = self.frameData[frame][1:]
-        self.ax.set_title('({0}, {1}, {2})'.format(coord[0], coord[1], coord[2]))
-        for x in range(self.dim_x):
-            for y in range(self.dim_y):
-                for z in range(self.dim_z):
-                    pos = [x, y, z]
-                    blockColor = self.getBlockColor(frameData[x][y][z])
-                    self.placeCube(self.ax, pos, blockColor)
+        frameData = np.array(self.frameData[frame][0])
+        x, y, z = self.frameData[frame][1:]
+        blockPos = np.empty((frameData.shape), dtype=object)
+        blockColors = np.empty((self.dim_x, self.dim_y, self.dim_z, 4), dtype=object)
+        
+        for block_id in range(self.blockCount):
+            blockPosArray = np.where(frameData == block_id)
+            if self.blockRegistryInv[block_id] == 'air': continue
+            blockPos[blockPosArray] = True
+            blockColors[blockPosArray] = self.getBlockColor(block_id)
+        
+        self.ax.voxels(blockPos, facecolors=blockColors, edgecolor='k')
         
         self.ax.plot([0, self.graphDim], [0, 0], [0, 0], color='red')    # X축
         self.ax.plot([0, 0], [0, self.graphDim], [0, 0], color='green')  # Y축
         self.ax.plot([0, 0], [0, 0], [0, self.graphDim], color='blue')   # Z축
-    
+        self.ax.text(s='({0:>2}, {1:>2}, {2:>2}) / Step {3}'.format(x, y, z, frame), x=-0.5, y=-0.5, z=-0.5, color='black', fontsize=10, ha='left', va='top')
     
     def placeCube(self, ax:plt.Axes, coord:list[int], blockColor):
         vertices = self.cubeVertices + coord
