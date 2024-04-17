@@ -105,7 +105,7 @@ class animatedVisualizer:
         #self.ax.view_init(elev=self.rotV, azim=self.rotH)
         
         frameData = np.array(self.frameData[frame][0])
-        x, y, z = self.frameData[frame][1:]
+        coord = self.frameData[frame][1:]
         blockPos = np.empty((frameData.shape), dtype=object)
         blockColors = np.empty((self.dim_x, self.dim_y, self.dim_z, 4), dtype=object)
         
@@ -120,7 +120,7 @@ class animatedVisualizer:
         self.ax.plot([0, self.graphDim], [0, 0], [0, 0], color='red')    # X축
         self.ax.plot([0, 0], [0, self.graphDim], [0, 0], color='green')  # Y축
         self.ax.plot([0, 0], [0, 0], [0, self.graphDim], color='blue')   # Z축
-        self.ax.text(s='({0:>2}, {1:>2}, {2:>2}) / Step {3}'.format(x, y, z, frame), x=-0.5, y=-0.5, z=-0.5, color='black', fontsize=10, ha='left', va='top')
+        self.ax.text(s='({0:>2}, {1:>2}, {2:>2}) / Step {3}'.format(coord[0], coord[1], coord[2], frame-1), x=-0.5, y=-0.5, z=-0.5, color='black', fontsize=10, ha='left', va='top')
     
     def placeCube(self, ax:plt.Axes, coord:list[int], blockColor):
         vertices = self.cubeVertices + coord

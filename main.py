@@ -1,5 +1,5 @@
 import anvil, time, random, numpy as np, os
-import wfcModel, mcaFileIO
+import mcaFileIO
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, INPUT_DIR, OUTPUT_DIR
 from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADJACENT_WALL, FILTER_ADJACENT_FLOOR
 from heuristicConfig import COMPLEXITY, ENTRY_POS, POS_MASK_SIZE, NODE_DIST_MAX, CUBOID_PADDING, EDGE_MAX_DY, EDGE_MAX_SLOPE
@@ -25,6 +25,7 @@ BLOCK_REGISTRY = {}
 BLOCK_REGISTRY_INV = []
 EXCLUDE_BLOCK_STRING_ID = ['bedrock', 'gray_wool', 'light_gray_wool', 'black_wool']
 EXCLUDE_BLOCK_ID = set()
+PLATFORM_FILTER = set()
 FLOOR_ADJACENT_FILTER = set()
 WALL_ADJACENT_FILTER = set()
 PATTERNS = []
@@ -37,14 +38,16 @@ def mcaInitializer():
         월드 파일을 읽고 블록 레지스트리 등록, 패턴 추출 수행
     """
     global DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, BLOCK_REGISTRY, BLOCK_REGISTRY_INV, PATTERNS
-    global EXCLUDE_BLOCK_STRING_ID, EXCLUDE_BLOCK_ID, FLOOR_ADJACENT_FILTER, WALL_ADJACENT_FILTER
+    global EXCLUDE_BLOCK_STRING_ID, EXCLUDE_BLOCK_ID, PLATFORM_FILTER, FLOOR_ADJACENT_FILTER, WALL_ADJACENT_FILTER
     timestamp = time.time()
     DIM_Y = mcaFileIO.getMaxY(inputWorld)
     inputCache = [[[-1 for _ in range(DIM_Z)] for _ in range(DIM_Y)] for _ in range(DIM_X)]
     BLOCK_REGISTRY, BLOCK_REGISTRY_INV = mcaFileIO.registerBlocks(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, timestamp)
     for block_id in EXCLUDE_BLOCK_STRING_ID:
         EXCLUDE_BLOCK_ID.add(BLOCK_REGISTRY[block_id])
-    FLOOR_ADJACENT_FILTER, WALL_ADJACENT_FILTER = mcaFileIO.extractFilterWhitelist(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache, BLOCK_REGISTRY, BLOCK_REGISTRY['black_wool'], BLOCK_REGISTRY['gray_wool'])
+    PLATFORM_FILTER, FLOOR_ADJACENT_FILTER, WALL_ADJACENT_FILTER = mcaFileIO.extractFilterWhitelist(DIM_X, DIM_Y, DIM_Z, inputWorld, inputCache, chunkCache,
+                                                                                                    BLOCK_REGISTRY, BLOCK_REGISTRY['air'], BLOCK_REGISTRY['black_wool'], BLOCK_REGISTRY['gray_wool'])
+    PLATFORM_FILTER -= EXCLUDE_BLOCK_ID
     PATTERNS = mcaFileIO.extractPatterns(DIM_X, DIM_Y, DIM_Z, BLOCK_REGISTRY, EXCLUDE_BLOCK_ID, inputWorld, inputCache, chunkCache, timestamp)
 
 def levelInitializer():
@@ -288,7 +291,7 @@ def constructPath(idx1, idx2):
         if p == 0 or p == DIM_X-1 or r == 0 or r == DIM_Z-1:
             continue
         apply3x3Filter(p, q, r, FILTER_PLATFORM)
-        apply3x3Filter(p, q+1, r, FILTER_AIR)
+        #apply3x3Filter(p, q+1, r, FILTER_AIR)
     
     pathSegment = np.array(initLevel)
     pathSegment = pathSegment[x1:x2+1, y1:y2+1, z1:z2+1]
@@ -299,8 +302,6 @@ def constructPath(idx1, idx2):
     for x in range(seg_x):
         for y in range(seg_y):
             for z in range(seg_z):
-                if x == 0 or x == seg_x-1 or z == 0 or z == seg_z-1:
-                    pathSegment[x][y][z] = FILTER_ADJACENT_WALL
                 i, j, k = x + x1, y + y1, z + z1
                 if pathSegment[x][y][z] == -1:
                     if x == 0 or x == seg_x-1 or z == 0 or z == seg_z-1:
@@ -312,7 +313,7 @@ def constructPath(idx1, idx2):
     
     # WFC 알고리즘 모델 초기화 및 경로 생성
     generatorModel = wfcWeightedModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY,
-                                excludeBlocks=EXCLUDE_BLOCK_ID, floorAdjacentFilter=FLOOR_ADJACENT_FILTER, wallAdjacentFilter=WALL_ADJACENT_FILTER,
+                                excludeBlocks=EXCLUDE_BLOCK_ID, platformFilter=PLATFORM_FILTER, floorAdjacentFilter=FLOOR_ADJACENT_FILTER, wallAdjacentFilter=WALL_ADJACENT_FILTER,
                                 priortizedCoords=nodeRelativeCoords, debug=True)
     pathSegment = generatorModel.generate()
     

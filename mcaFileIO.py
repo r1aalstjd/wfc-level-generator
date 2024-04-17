@@ -25,10 +25,11 @@ def getBlock(x, y, z, inputWorld, inputCache, chunkCache) -> anvil.Block:
         inputCache[x][y][z] = chunkCache[chunk__x][chunk__z].get_block(block__x, y, block__z)
         return inputCache[x][y][z]
 
-def extractFilterWhitelist(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, blockRegistry, floorBlockID, wallBlockID) -> tuple[set, set]: 
+def extractFilterWhitelist(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, blockRegistry, airBlockID, floorBlockID, wallBlockID) -> tuple[set, set, set]: 
     """
         필터링을 위한 블록 목록을 추출하는 함수
     """
+    platformFilter = set()
     floorFilter = set()
     wallFilter = set()
     for i in range(dim_x):
@@ -36,6 +37,8 @@ def extractFilterWhitelist(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCac
             for k in range(dim_z):
                 block_string_id = getBlock(i, j, k, inputWorld, inputCache, chunkCache).id
                 block_id = blockRegistry[block_string_id]
+                if block_id == airBlockID:
+                    platformFilter.add(blockRegistry[getBlock(i, j-1, k, inputWorld, inputCache, chunkCache).id])
                 if block_id == floorBlockID:
                     floorFilter.add(blockRegistry[getBlock(i, j+1, k, inputWorld, inputCache, chunkCache).id])
                 if block_id == wallBlockID:
@@ -47,9 +50,11 @@ def extractFilterWhitelist(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCac
                         wallFilter.add(blockRegistry[getBlock(i, j, k+1, inputWorld, inputCache, chunkCache).id])
                     if k == dim_z - 1:
                         wallFilter.add(blockRegistry[getBlock(i, j, k-1, inputWorld, inputCache, chunkCache).id])
+    platformFilter.discard(airBlockID)
+    platformFilter.discard(floorBlockID)
     floorFilter.discard(floorBlockID)
     wallFilter.discard(wallBlockID)
-    return floorFilter, wallFilter
+    return platformFilter, floorFilter, wallFilter
 
 def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, timestamp):
     """
@@ -95,14 +100,15 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, excludeBlocks, inputWorl
                                 check += 1
                             else:
                                 block_id = blockRegistry[getBlock(x, y, z, inputWorld, inputCache, chunkCache).id]
-                                if block_id == blockRegistry['air']:
-                                    block_id = -1
+                                #if block_id == blockRegistry['air']:
+                                #    block_id = -1
                                 propMatrix[p][q][r] = block_id
                                 usedBlocks.add(propMatrix[p][q][r])
                 center_id = blockRegistry[getBlock(i, j, k, inputWorld, inputCache, chunkCache).id]
                 
                 # 범위 밖 공간을 포함하는 패턴 등록 제외
                 if check != 0: continue
+                if len(usedBlocks & excludeBlocks) > 0: continue
                 
                 # 패턴 중심 블록이 공기 블록일 경우 등록 제외
                 if center_id == blockRegistry['air']:
