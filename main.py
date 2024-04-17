@@ -3,6 +3,7 @@ import mcaFileIO
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, MATRIX_X, MATRIX_Y, MATRIX_Z, INPUT_DIR, OUTPUT_DIR
 from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADJACENT_WALL, FILTER_ADJACENT_FLOOR
 from heuristicConfig import COMPLEXITY, ENTRY_POS, POS_MASK_SIZE, NODE_DIST_MAX, CUBOID_PADDING, EDGE_MAX_DY, EDGE_MAX_SLOPE
+from heuristicConfig import WFCHeuristic
 from wfcModel import wfcModel, Node, Pattern
 from wfcWeightedModel import wfcWeightedModel
 
@@ -287,6 +288,8 @@ def constructPath(idx1, idx2):
     nodeRelativeCoords = []
     for idx in (idx1, idx2):
         p, q, r = nodeList[idx]
+        if q == ENTRY_POS and (p == 1 or p == DIM_X // 2) and (r == 1 or r == DIM_Z // 2):
+            continue
         nodeRelativeCoords.append((p - x1, q - y1, r - z1))
         if p == 0 or p == DIM_X-1 or r == 0 or r == DIM_Z-1:
             continue
@@ -314,7 +317,7 @@ def constructPath(idx1, idx2):
     # WFC 알고리즘 모델 초기화 및 경로 생성
     generatorModel = wfcWeightedModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY,
                                 excludeBlocks=EXCLUDE_BLOCK_ID, platformFilter=PLATFORM_FILTER, floorAdjacentFilter=FLOOR_ADJACENT_FILTER, wallAdjacentFilter=WALL_ADJACENT_FILTER,
-                                priortizedCoords=nodeRelativeCoords, debug=True)
+                                priortizedCoords=nodeRelativeCoords, heuristic=WFCHeuristic.VerticalScanline, debug=True)
     pathSegment = generatorModel.generate()
     
     if pathSegment != None:

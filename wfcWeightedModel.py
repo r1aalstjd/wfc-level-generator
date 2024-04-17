@@ -3,6 +3,7 @@ from copy import deepcopy
 from constantTable import MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, EPSILON
 from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADJACENT_WALL, FILTER_ADJACENT_FLOOR
 from animatedVisualizer import animatedVisualizer
+from heuristicConfig import WFCHeuristic
 
 class wfcWeightedModel:
     """
@@ -20,10 +21,11 @@ class wfcWeightedModel:
     """
     def __init__(self, dim_x:int, dim_y:int, dim_z:int, initWave, patterns, blockRegistry, excludeBlocks,
                 platformFilter:set[int], floorAdjacentFilter:set[int], wallAdjacentFilter:set[int],
-                priortizedCoords:list[tuple[int, int, int]] = [], debug = False):
+                priortizedCoords:list[tuple[int, int, int]] = [], heuristic = WFCHeuristic.Entropy, debug = False):
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.dim_z = dim_z
+        self.heuristic = heuristic
         
         self.patterns = patterns
         self.blockRegistry = blockRegistry
@@ -35,6 +37,7 @@ class wfcWeightedModel:
         self.wallAdjacentFilter = wallAdjacentFilter
         
         self.debugMode = debug
+        self.lastObserved = (-1, -1, -1)
         
         self.nodeUpdateStack = []
         self.stateCellUpdateStack = set()
@@ -53,13 +56,13 @@ class wfcWeightedModel:
             self.debugStateCell('./modelInitDebug/statecell.txt', 'w+')
             self.debugEntropy('./modelInitDebug/entropy.txt', 'w+')
     
-    def debugWriteFrame(self, x, y, z):
+    def debugWriteFrame(self, p, q, r):
         frame = [[[0 for _ in range(self.dim_z)] for _ in range(self.dim_y)] for _ in range(self.dim_x)]
         for x in range(self.dim_x):
             for y in range(self.dim_y):
                 for z in range(self.dim_z):
                     frame[x][y][z] = self.waveFunc[x][y][z].block_id
-        self.debugFrames.append((frame, x, y, z))
+        self.debugFrames.append((frame, p, q, r))
     
     def debugOutput(self, dir, mode = 'w+', coord = None):
         """
@@ -151,7 +154,12 @@ class wfcWeightedModel:
     def wfcStep(self, step):
         self.updateNodes()
         self.updateStateCell()
-        x, y, z = self.findLeastEntropy()
+        x, y, z = -1, -1, -1
+        
+        if self.heuristic == WFCHeuristic.VerticalScanline:
+            x, y, z = self.findNextWithScanline()
+        else:
+            x, y, z = self.findLeastEntropy()
         
         if self.debugMode:
             print('{:>2} {:>2} {:>2} {:>4}'.format(x, y, z, step))
@@ -200,7 +208,7 @@ class wfcWeightedModel:
                         coords.append((dist, nodeEntropy, weightSum, i, j, k))
         
         # 정렬 기준: 엔트로피 -> 우선순위 좌표까지의 거리
-        coords.sort(key=lambda x:(x[1], x[0]))
+        coords.sort(key=lambda x:(x[1]))
         
         for d, e1, wsum, x, y, z in coords:
             if wsum > 0:
@@ -208,6 +216,28 @@ class wfcWeightedModel:
                 return (x, y, z)
         
         # 매트릭스의 모든 원소가 붕괴된 상태
+        return (-1, -1, -1)
+    
+    def findNextWithScanline(self) -> tuple[int, int, int]:
+        """
+            Scanline 휴리스틱으로 다음 노드를 선택해 좌표를 반환하는 함수.
+        """
+        x, y, z = -1, -1, -1
+        if self.lastObserved == (-1, -1, -1):
+            x = 0
+            y = 0
+            z = 0
+        else:
+            x, y, z = self.lastObserved
+        index = x * self.dim_y * self.dim_z + y * self.dim_z + z + 1
+        for idx in range(index, self.dim_x * self.dim_y * self.dim_z):
+            x = idx // (self.dim_y * self.dim_z)
+            y = (idx % (self.dim_y * self.dim_z)) // self.dim_z
+            z = idx % self.dim_z
+            yInv = self.dim_y - y - 1
+            if self.checkAvailableNode(x, yInv, z) == 1:
+                self.lastObserved = (x, y, z)
+                return (x, yInv, z)
         return (-1, -1, -1)
     
     def updateNodes(self):
@@ -318,15 +348,15 @@ class Node:
             ->  w * log(sum) / sum - w * log(w) / sum
         """
         weightSum = 0
+        weightSumLog = 0
         entropy = 0
         for i in range(self.patternCount):
             if self.states[i] != 0:
-                weightSum += self.model.patterns[i].count
-        for i in range(self.patternCount):
-            if self.states[i] != 0:
                 w = self.model.patterns[i].count
-                px = (w / weightSum)
-                entropy -= px * math.log2(px)
+                weightSum += w
+                weightSumLog += w * math.log2(w)
+        if weightSum > 0:
+            entropy = math.log2(weightSum) - weightSumLog / weightSum
         self.weightSum = weightSum
         self.entropy = entropy
         return self.entropy

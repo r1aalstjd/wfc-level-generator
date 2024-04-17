@@ -30,8 +30,6 @@ class animatedVisualizer:
         self.azim = azim
         self.roll = roll
         
-        print(self.frameCount, self.dim_x, self.dim_y, self.dim_z)
-        
         self.frameData = frameData
         self.blockRegistryInv = blockRegistryInv
         self.blockCount = len(blockRegistryInv)
@@ -105,7 +103,9 @@ class animatedVisualizer:
         #self.ax.view_init(elev=self.rotV, azim=self.rotH)
         
         frameData = np.array(self.frameData[frame][0])
-        coord = self.frameData[frame][1:]
+        posX = self.frameData[frame][1]
+        posY = self.frameData[frame][2]
+        posZ = self.frameData[frame][3]
         blockPos = np.empty((frameData.shape), dtype=object)
         blockColors = np.empty((self.dim_x, self.dim_y, self.dim_z, 4), dtype=object)
         
@@ -115,13 +115,17 @@ class animatedVisualizer:
             blockPos[blockPosArray] = True
             blockColors[blockPosArray] = self.getBlockColor(block_id)
         
+        blockPos[posX, posY, posZ] = True
+        blockColors[posX, posY, posZ] = (1, 0, 0, 0.5)
+        
         self.ax.voxels(blockPos, facecolors=blockColors, edgecolor='k')
         
         self.ax.plot([0, self.graphDim], [0, 0], [0, 0], color='red')    # X축
         self.ax.plot([0, 0], [0, self.graphDim], [0, 0], color='green')  # Y축
         self.ax.plot([0, 0], [0, 0], [0, self.graphDim], color='blue')   # Z축
-        self.ax.text(s='({0:>2}, {1:>2}, {2:>2}) / Step {3}'.format(coord[0], coord[1], coord[2], frame-1), x=-0.5, y=-0.5, z=-0.5, color='black', fontsize=10, ha='left', va='top')
+        self.ax.text(s='({0}, {1}, {2}) / Step {3}'.format(posX, posY, posZ, frame-1), x=-0.5, y=-0.5, z=-0.5, color='black', fontsize=10, ha='left', va='top')
     
+    @DeprecationWarning
     def placeCube(self, ax:plt.Axes, coord:list[int], blockColor):
         vertices = self.cubeVertices + coord
 
