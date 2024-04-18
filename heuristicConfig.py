@@ -24,4 +24,4 @@ EDGE_MAX_SLOPE = 0.5
 # WFC 알고리즘 휴리스틱 설정
 class WFCHeuristic(Enum):
     Entropy = 0
-    VerticalScanline = 1
+    Scanline = 1

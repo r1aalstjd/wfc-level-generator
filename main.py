@@ -243,7 +243,7 @@ def createLevel():
     global initLevel, nodeList, edgeSet
     edgeList = list(edgeSet)
     
-    # 간선의 비용을 기준으로 오름차순 정렬
+    # 간선의 비용을 기준으로 내림차순 정렬
     edgeList.sort(key=lambda x: x[3], reverse=True)
     
     edgeCount = 0
@@ -262,7 +262,7 @@ def createLevel():
         #edgeCount += 1
     return initLevel
 
-def apply3x3Filter(segment, x, y, z, mask):
+def apply3x3Filter(segment, seg_x, seg_y, seg_z, x, y, z, mask):
     """
         파동함수의 지정된 좌표를 중심으로 XZ 평면상의 3 by 3 구역에 패턴 필터 적용
         
@@ -272,7 +272,7 @@ def apply3x3Filter(segment, x, y, z, mask):
     for i in range(8):
         p = x + dx_3x3[i]
         r = z + dz_3x3[i]
-        if p < 0 or r < 0 or p >= DIM_X or r >= DIM_Z: continue
+        if p < 0 or r < 0 or p >= seg_x or r >= seg_z: continue
         if segment[p][y][r] == -1:
             segment[p][y][r] = mask
 
@@ -299,7 +299,7 @@ def constructPath(idx1, idx2):
         nodeRelativeCoords.append((p - x1, q - y1, r - z1))
         if p == 0 or p == DIM_X-1 or r == 0 or r == DIM_Z-1:
             continue
-        apply3x3Filter(pathSegment, p - x1, q - y1, r - z1, FILTER_PLATFORM)
+        apply3x3Filter(pathSegment, seg_x, seg_y, seg_z, p - x1, q - y1, r - z1, FILTER_PLATFORM)
         #apply3x3Filter(p, q+1, r, FILTER_AIR)
     
     # 전체 레벨 상에서 벽 또는 바닥에 인접한 좌표에 필터 적용
@@ -318,7 +318,7 @@ def constructPath(idx1, idx2):
     # WFC 알고리즘 모델 초기화 및 경로 생성
     generatorModel = wfcWeightedModel(dim_x=seg_x, dim_y=seg_y, dim_z=seg_z, initWave=pathSegment, patterns=PATTERNS, blockRegistry=BLOCK_REGISTRY,
                                 excludeBlocks=EXCLUDE_BLOCK_ID, platformFilter=PLATFORM_FILTER, floorAdjacentFilter=FLOOR_ADJACENT_FILTER, wallAdjacentFilter=WALL_ADJACENT_FILTER,
-                                priortizedCoords=nodeRelativeCoords, heuristic=WFCHeuristic.VerticalScanline, debug=True)
+                                priortizedCoords=nodeRelativeCoords, heuristic=WFCHeuristic.Scanline, debug=True)
     pathSegment = generatorModel.generate()
     
     if pathSegment != None:
@@ -346,5 +346,5 @@ if __name__ == "__main__":
 
 """
     TODO
-    -
+    - 생성된 Path 빈 공간 패턴 대체 후 레벨에 붙여넣기
 """

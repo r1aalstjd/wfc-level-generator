@@ -100,8 +100,8 @@ def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, excludeBlocks, inputWorl
                                 check += 1
                             else:
                                 block_id = blockRegistry[getBlock(x, y, z, inputWorld, inputCache, chunkCache).id]
-                                #if block_id == blockRegistry['air']:
-                                #    block_id = -1
+                                if block_id == blockRegistry['air']:
+                                    block_id = -1
                                 propMatrix[p][q][r] = block_id
                                 usedBlocks.add(propMatrix[p][q][r])
                 center_id = blockRegistry[getBlock(i, j, k, inputWorld, inputCache, chunkCache).id]

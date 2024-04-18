@@ -1,5 +1,6 @@
 import random, math
 from copy import deepcopy
+from datetime import datetime
 from constantTable import MATRIX_X, MATRIX_Y, MATRIX_Z, OFF_X, OFF_Y, OFF_Z, EPSILON
 from constantTable import FILTER_AIR, FILTER_PLATFORM, FILTER_ADJACENT_WALL, FILTER_ADJACENT_FLOOR
 from animatedVisualizer import animatedVisualizer
@@ -83,6 +84,7 @@ class wfcWeightedModel:
                         debugWorld.write('\n')
                     debugWorld.write('\n')
         for y in range(self.dim_y):
+            debugWorld.write('{}\n'.format(y))
             for x in range(self.dim_x):
                 for z in range(self.dim_z):
                     debugWorld.write('{:>3} '.format(self.waveFunc[x][y][z].block_id))
@@ -98,9 +100,10 @@ class wfcWeightedModel:
         if coord:
             debugWorld.write('{:>2} {:>2} {:>2}\n'.format(coord[0], coord[1], coord[2]))
         for y in range(self.dim_y):
+            debugWorld.write('{}\n'.format(y))
             for x in range(self.dim_x):
                 for z in range(self.dim_z):
-                    debugWorld.write('{:>3} '.format(len(self.stateCell[x][y][z])))
+                    debugWorld.write('{:>40} '.format(str(self.stateCell[x][y][z])))
                 debugWorld.write('\n')
             debugWorld.write('\n')
         debugWorld.close()
@@ -148,8 +151,9 @@ class wfcWeightedModel:
         #self.debugOutput('./Debug/debugWorld.txt', 'w+')
         
         if self.debugMode:
+            dt = datetime.now().strftime(r'%Y%m%d-%H%M%S')
             animatedVisualizer(self.debugFrames, list(self.blockRegistry.keys()), 
-                            './Debug/Visualization/', 'world.gif', interval=200, elev=22.5, azim=-135, roll=0)
+                            './Debug/Visualization/', 'wfc-{}.gif'.format(dt), interval=200, elev=22.5, azim=-135, roll=0)
         cont = self.checkContradiction()
         if cont:
             print("Contradiction detected.")
@@ -167,7 +171,7 @@ class wfcWeightedModel:
         self.updateStateCell()
         x, y, z = -1, -1, -1
         
-        if self.heuristic == WFCHeuristic.VerticalScanline:
+        if self.heuristic == WFCHeuristic.Scanline:
             x, y, z = self.findNextWithScanline()
         else:
             x, y, z = self.findLeastEntropy()
@@ -183,7 +187,7 @@ class wfcWeightedModel:
         if self.debugMode:
             self.debugWriteFrame(x, y, z)
             self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
-            #self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
+            self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
         
         return 1
     
@@ -198,14 +202,11 @@ class wfcWeightedModel:
     
     def checkAvailableNode(self, x:int, y:int, z:int):
         if self.waveFunc[x][y][z].collapsed == 1 or self.waveFunc[x][y][z].isContradicted() == 1:
-            #print(x, y, z, "col" if self.waveFunc[x][y][z].collapsed == 1 else "cont")
             return 0
         # 벽, 바닥 인접 패턴 및 빈 공간에 해당하는 노드 붕괴 방지
         if self.waveFunc[x][y][z].block_id == -1 or self.waveFunc[x][y][z].block_id == self.blockRegistry['air']:
-            #print(x, y, z, "empty" if self.waveFunc[x][y][z].block_id == -1 else "air")
             return 0
         if self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_FLOOR or self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_WALL:
-            #print(x, y, z, "filter")
             return 0
         return 1
     
@@ -320,7 +321,7 @@ class wfcWeightedModel:
         
         self.updateStateCell()
 
-        #self.debugStateCell('./testStateCell/init1.txt', 'w+')
+        self.debugStateCell('./testStateCell/init1.txt', 'w+')
 
 class Node:
     def __init__(self, dim_x:int, dim_y:int, dim_z:int, states = [], model:wfcWeightedModel = None):
@@ -472,12 +473,20 @@ class Node:
                         self.model.waveFunc[i][j][k].block_id = block_id
                         self.model.stateCell[i][j][k] = {block_id}
         
-        for p in range(MATRIX_X+2):
-            for q in range(MATRIX_Y+2):
-                for r in range(MATRIX_Z+2):
-                    i = x - (OFF_X+1) + p
-                    j = y - (OFF_Y+1) + q
-                    k = z - (OFF_Z+1) + r
+        #for p in range(MATRIX_X+2):
+        #    for q in range(MATRIX_Y+2):
+        #        for r in range(MATRIX_Z+2):
+        #            i = x - (OFF_X+1) + p
+        #            j = y - (OFF_Y+1) + q
+        #            k = z - (OFF_Z+1) + r
+        #            if i < 0 or j < 0 or k < 0 or i >= self.dim_x or j >= self.dim_y or k >= self.dim_z: continue
+        #            updateStack.append((i, j, k))
+        for p in range(MATRIX_X):
+            for q in range(MATRIX_Y):
+                for r in range(MATRIX_Z):
+                    i = x - (OFF_X) + p
+                    j = y - (OFF_Y) + q
+                    k = z - (OFF_Z) + r
                     if i < 0 or j < 0 or k < 0 or i >= self.dim_x or j >= self.dim_y or k >= self.dim_z: continue
                     updateStack.append((i, j, k))
     
@@ -552,8 +561,8 @@ class Node:
                     
                     # 현재 좌표에 블록 ID가 지정된 경우
                     if current_block >= 0:
-                        if pattern_block == -1:
-                            continue
+                        #if pattern_block == -1:
+                        #    continue
                         if pattern_block != current_block:
                             return 0
         
@@ -568,9 +577,9 @@ class Node:
         #f = open('./testAvailablePatterns/{}_{}_{}.txt'.format(x, y, z), 'w+')
         #f.write('{:>2} {:>2} {:>2}\n'.format(x, y, z))
         
-        updateCheck = self.updateStateCache(x, y, z)
+        #updateCheck = self.updateStateCache(x, y, z)
         self.checkCover(x, y, z)
-        if updateCheck < 1: return
+        #if updateCheck < 1: return
         
         #for p in range(MATRIX_X):
         #    for q in range(MATRIX_Y):
@@ -614,5 +623,6 @@ class Pattern:
 
 """
     TODO
-    - 
+    - 패턴 해시 테이블을 활용하는 모순 상태 체크 함수
+    - 상태 셀로 인한 모순 상태 해결
 """

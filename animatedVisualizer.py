@@ -120,9 +120,9 @@ class animatedVisualizer:
         
         self.ax.voxels(blockPos, facecolors=blockColors, edgecolor='k', zorder=-2)
         
-        self.ax.plot([0, self.graphDim], [0, 0], [0, 0], color='red', zorder=1)    # X축
-        self.ax.plot([0, 0], [0, self.graphDim], [0, 0], color='green', zorder=1)  # Y축
-        self.ax.plot([0, 0], [0, 0], [0, self.graphDim], color='blue', zorder=1)   # Z축
+        self.ax.plot([0, self.dim_x], [0, 0], [0, 0], color='red', zorder=1)    # X축
+        self.ax.plot([0, 0], [0, self.dim_y], [0, 0], color='green', zorder=1)  # Y축
+        self.ax.plot([0, 0], [0, 0], [0, self.dim_z], color='blue', zorder=1)   # Z축
         self.ax.plot([0, self.graphDim], [posY, posY], [posZ, posZ], color=(1, 0, 0, 0.5), linestyle='--', zorder=-1)
         self.ax.plot([posX, posX], [0, self.graphDim], [posZ, posZ], color=(1, 0, 0, 0.5), linestyle='--', zorder=-1)
         self.ax.plot([posX, posX], [posY, posY], [0, self.graphDim], color=(1, 0, 0, 0.5), linestyle='--', zorder=-1)
@@ -156,3 +156,8 @@ if __name__ == '__main__':
         ([[[1, 1, 1, 1, 1]]],0, 0, 0),
     ]
     animatedVisualizer(testData, ['black_wool', 'bedrock'], './Debug/Visualization/', 'animator_test.gif', 1000, 22.5, -135, 0)
+
+"""
+    TODO
+    - plot 함수로 복셀 렌더링 대체 -> 가속화, 커스텀 가능
+"""
