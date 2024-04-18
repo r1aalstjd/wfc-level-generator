@@ -37,7 +37,9 @@ class wfcWeightedModel:
         self.wallAdjacentFilter = wallAdjacentFilter
         
         self.debugMode = debug
-        self.lastObserved = (-1, -1, -1)
+        self.scanlineLastIndex = -1
+        self.scanlineInvLastIndex = self.dim_x * self.dim_y * self.dim_z
+        self.scanlineLoopCheck = 0
         
         self.nodeUpdateStack = []
         self.stateCellUpdateStack = set()
@@ -70,7 +72,16 @@ class wfcWeightedModel:
         """
         debugWorld = open(dir, mode)
         if coord:
-            debugWorld.write('{:>2} {:>2} {:>2}\n'.format(coord[0], coord[1], coord[2]))
+            px, py, pz = coord
+            regInv = list(self.blockRegistry.keys())
+            debugWorld.write('{:>2} {:>2} {:>2}\n'.format(px, py, pz))
+            if self.waveFunc[px][py][pz].pattern_id >= 0:
+                for y in range(MATRIX_Y):
+                    for x in range(MATRIX_X):
+                        for z in range(MATRIX_Z):
+                            debugWorld.write('{:>20} '.format(regInv[self.patterns[self.waveFunc[px][py][pz].pattern_id].state[x][y][z]]))
+                        debugWorld.write('\n')
+                    debugWorld.write('\n')
         for y in range(self.dim_y):
             for x in range(self.dim_x):
                 for z in range(self.dim_z):
@@ -171,7 +182,7 @@ class wfcWeightedModel:
         
         if self.debugMode:
             self.debugWriteFrame(x, y, z)
-            #self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
+            self.debugOutput('./testOutputs/world{}.txt'.format(step), 'w+', (x, y, z))
             #self.debugStateCell('./testStateCell/world{}.txt'.format(step), 'w+', (x, y, z))
         
         return 1
@@ -187,17 +198,20 @@ class wfcWeightedModel:
     
     def checkAvailableNode(self, x:int, y:int, z:int):
         if self.waveFunc[x][y][z].collapsed == 1 or self.waveFunc[x][y][z].isContradicted() == 1:
+            #print(x, y, z, "col" if self.waveFunc[x][y][z].collapsed == 1 else "cont")
             return 0
         # 벽, 바닥 인접 패턴 및 빈 공간에 해당하는 노드 붕괴 방지
         if self.waveFunc[x][y][z].block_id == -1 or self.waveFunc[x][y][z].block_id == self.blockRegistry['air']:
+            #print(x, y, z, "empty" if self.waveFunc[x][y][z].block_id == -1 else "air")
             return 0
         if self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_FLOOR or self.waveFunc[x][y][z].block_id == FILTER_ADJACENT_WALL:
+            #print(x, y, z, "filter")
             return 0
         return 1
     
     def findLeastEntropy(self) -> tuple[int, int, int]:
         """
-            매트릭스 내 엔트로피가 최소인 노드의 좌표를 반환하는 함수.
+            파동함수 내 엔트로피가 최소인 노드의 좌표를 반환하는 함수.
         """
         coords = []
         for i in range(self.dim_x):
@@ -221,22 +235,32 @@ class wfcWeightedModel:
     def findNextWithScanline(self) -> tuple[int, int, int]:
         """
             Scanline 휴리스틱으로 다음 노드를 선택해 좌표를 반환하는 함수.
+            
+            Scanline 순서: (0, dim_y-1, 0) -> (X+, Y-, Z+) -> (dim_x-1, 0, dim_z-1)
         """
-        x, y, z = -1, -1, -1
-        if self.lastObserved == (-1, -1, -1):
-            x = 0
-            y = 0
-            z = 0
-        else:
-            x, y, z = self.lastObserved
-        index = x * self.dim_y * self.dim_z + y * self.dim_z + z + 1
-        for idx in range(index, self.dim_x * self.dim_y * self.dim_z):
-            x = idx // (self.dim_y * self.dim_z)
-            y = (idx % (self.dim_y * self.dim_z)) // self.dim_z
+        # 정방향 Scanline
+        index = self.scanlineLastIndex + 1
+        if self.scanlineLoopCheck == 0:
+            for idx in range(index, self.dim_x * self.dim_y * self.dim_z):
+                y = idx // (self.dim_x * self.dim_z)
+                x = (idx % (self.dim_x * self.dim_z)) // self.dim_z
+                z = idx % self.dim_z
+                yInv = self.dim_y - y - 1
+                if self.checkAvailableNode(x, yInv, z) == 1:
+                    self.scanlineLastIndex = idx
+                    return (x, yInv, z)
+            else:
+                self.scanlineLoopCheck = 1
+        
+        # 역방향 Scanline
+        indexInv = self.scanlineInvLastIndex - 1
+        for idx in range(indexInv, -1, -1):
+            y = idx // (self.dim_x * self.dim_z)
+            x = (idx % (self.dim_x * self.dim_z)) // self.dim_z
             z = idx % self.dim_z
             yInv = self.dim_y - y - 1
             if self.checkAvailableNode(x, yInv, z) == 1:
-                self.lastObserved = (x, y, z)
+                self.scanlineInvLastIndex = idx
                 return (x, yInv, z)
         return (-1, -1, -1)
     
@@ -328,7 +352,7 @@ class Node:
         return x - OFF_X + p, y - OFF_Y + q, z - OFF_Z + r
     
     def isContradicted(self):
-        if self.entropy == 0 and self.collapsed == 0:
+        if self.weightSum == 0 and self.collapsed == 0:
             if self.isCovered != 0: return 0
             else: return 1
         return 0

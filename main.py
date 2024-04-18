@@ -262,18 +262,19 @@ def createLevel():
         #edgeCount += 1
     return initLevel
 
-def apply3x3Filter(x, y, z, mask):
+def apply3x3Filter(segment, x, y, z, mask):
     """
         파동함수의 지정된 좌표를 중심으로 XZ 평면상의 3 by 3 구역에 패턴 필터 적용
+        
+        segment     - 구조물을 생성할 구역 배열
     """
-    global initLevel
-    if initLevel[x][y][z] == -1: initLevel[x][y][z] = mask
+    if segment[x][y][z] == -1: segment[x][y][z] = mask
     for i in range(8):
         p = x + dx_3x3[i]
         r = z + dz_3x3[i]
         if p < 0 or r < 0 or p >= DIM_X or r >= DIM_Z: continue
-        if initLevel[p][y][r] == -1:
-            initLevel[p][y][r] = mask
+        if segment[p][y][r] == -1:
+            segment[p][y][r] = mask
 
 def constructPath(idx1, idx2):
     """
@@ -284,6 +285,11 @@ def constructPath(idx1, idx2):
     x1, y1, z1, x2, y2, z2 = getCuboid(idx1, idx2)
     y1 = 1
     
+    pathSegment = np.array(initLevel)
+    pathSegment = pathSegment[x1:x2+1, y1:y2+1, z1:z2+1]
+    pathSegment = list(pathSegment)
+    seg_x, seg_y, seg_z = x2-x1+1, y2-y1+1, z2-z1+1
+    
     # 경로를 생성할 구역 기준 노드의 상대 좌표를 저장
     nodeRelativeCoords = []
     for idx in (idx1, idx2):
@@ -293,13 +299,8 @@ def constructPath(idx1, idx2):
         nodeRelativeCoords.append((p - x1, q - y1, r - z1))
         if p == 0 or p == DIM_X-1 or r == 0 or r == DIM_Z-1:
             continue
-        apply3x3Filter(p, q, r, FILTER_PLATFORM)
+        apply3x3Filter(pathSegment, p - x1, q - y1, r - z1, FILTER_PLATFORM)
         #apply3x3Filter(p, q+1, r, FILTER_AIR)
-    
-    pathSegment = np.array(initLevel)
-    pathSegment = pathSegment[x1:x2+1, y1:y2+1, z1:z2+1]
-    pathSegment = list(pathSegment)
-    seg_x, seg_y, seg_z = x2-x1+1, y2-y1+1, z2-z1+1
     
     # 전체 레벨 상에서 벽 또는 바닥에 인접한 좌표에 필터 적용
     for x in range(seg_x):
@@ -335,6 +336,9 @@ if __name__ == "__main__":
     rmTarget = os.listdir('./testOutputs/')
     for file in rmTarget:
         os.remove('./testOutputs/' + file)
+    rmTarget = os.listdir('./testStateCell/')
+    for file in rmTarget:
+        os.remove('./testStateCell/' + file)
     
     level = createLevel()
     mcaFileIO.writeMCA(DIM_X, DIM_Y, DIM_Z, level, BLOCK_REGISTRY_INV)
@@ -342,7 +346,5 @@ if __name__ == "__main__":
 
 """
     TODO
-    - WFC 모델 가중치 모델로 수정
-    - WFC 실행 시 공기 패턴 붕괴 방지
-    - 정상적인 구조물 생성 유도
+    -
 """

@@ -118,12 +118,15 @@ class animatedVisualizer:
         blockPos[posX, posY, posZ] = True
         blockColors[posX, posY, posZ] = (1, 0, 0, 0.5)
         
-        self.ax.voxels(blockPos, facecolors=blockColors, edgecolor='k')
+        self.ax.voxels(blockPos, facecolors=blockColors, edgecolor='k', zorder=-2)
         
-        self.ax.plot([0, self.graphDim], [0, 0], [0, 0], color='red')    # X축
-        self.ax.plot([0, 0], [0, self.graphDim], [0, 0], color='green')  # Y축
-        self.ax.plot([0, 0], [0, 0], [0, self.graphDim], color='blue')   # Z축
-        self.ax.text(s='({0}, {1}, {2}) / Step {3}'.format(posX, posY, posZ, frame-1), x=-0.5, y=-0.5, z=-0.5, color='black', fontsize=10, ha='left', va='top')
+        self.ax.plot([0, self.graphDim], [0, 0], [0, 0], color='red', zorder=1)    # X축
+        self.ax.plot([0, 0], [0, self.graphDim], [0, 0], color='green', zorder=1)  # Y축
+        self.ax.plot([0, 0], [0, 0], [0, self.graphDim], color='blue', zorder=1)   # Z축
+        self.ax.plot([0, self.graphDim], [posY, posY], [posZ, posZ], color=(1, 0, 0, 0.5), linestyle='--', zorder=-1)
+        self.ax.plot([posX, posX], [0, self.graphDim], [posZ, posZ], color=(1, 0, 0, 0.5), linestyle='--', zorder=-1)
+        self.ax.plot([posX, posX], [posY, posY], [0, self.graphDim], color=(1, 0, 0, 0.5), linestyle='--', zorder=-1)
+        self.ax.text(s='({0}, {1}, {2}) / Step {3}'.format(posX, posY, posZ, frame-1), x=-0.5, y=-0.5, z=-0.5, color='black', fontsize=10, ha='left', va='top', zorder=2)
     
     @DeprecationWarning
     def placeCube(self, ax:plt.Axes, coord:list[int], blockColor):
