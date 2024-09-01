@@ -56,11 +56,11 @@ def extractFilterWhitelist(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCac
     wallFilter.discard(wallBlockID)
     return platformFilter, floorFilter, wallFilter
 
-def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, timestamp):
+def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache):
     """
         읽어온 월드 파일 내 존재하는 블록을 레지스트리에 등록하는 함수
     """
-    blockRegistry = {}
+    blockRegistry = {'air': 0}
     blockRegistryInv = []
     
     for i in range(dim_x):
@@ -73,8 +73,6 @@ def registerBlocks(dim_x, dim_y, dim_z, inputWorld, inputCache, chunkCache, time
         blockRegistry[key] = q
         blockRegistryInv.append(key)
         q += 1
-    timeElapsed = time.time()
-    print("Block Registration completed. (took {}s)".format(round(timeElapsed - timestamp, 6)))
     return blockRegistry, blockRegistryInv
 
 def extractPatterns(dim_x, dim_y, dim_z, blockRegistry, excludeBlocks, inputWorld, inputCache, chunkCache, timestamp):

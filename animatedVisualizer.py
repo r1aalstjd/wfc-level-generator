@@ -20,7 +20,7 @@ class animatedVisualizer:
         filename:           저장할 파일 이름
     """
     def __init__(self, frameData:list[tuple[list[list[list[int]]], int, int, int]], blockRegistryInv:list[str], dir, filename='animated.gif', 
-                interval = 50, elev = 0, azim = 0, roll = 0):
+                interval = 50, elev = 22.5, azim = -135, roll = 0):
         self.frameCount = len(frameData)
         self.dim_x = len(frameData[0][0])
         self.dim_y = len(frameData[0][0][0])
