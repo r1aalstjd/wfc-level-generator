@@ -2,7 +2,7 @@ import anvil, time, random, numpy as np, os, sys
 import mcaFileIO
 from copy import deepcopy
 from constantTable import SIZE_X, SIZE_Y, SIZE_Z, DX_3X3, DZ_3X3, MATRIX_X, MATRIX_Y, MATRIX_Z, INPUT_DIR, OUTPUT_DIR, ENTRY_COORDS, NEUMANN_NEIGHBOR_3D
-from WaveFunctionCollapse3D import WaveFunctionCollapse3D
+from WaveFunctionCollapse.WaveFunctionCollapse3D import WaveFunctionCollapse3D
 from pyvistaVisualizer import pyvistaVisualizer
 
 class levelGenerator():

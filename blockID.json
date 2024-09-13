@@ -1,0 +1,9 @@
+{
+    "EMPTY_SPACE": -1,
+    "AIR": 0,
+    "FILLED_SPACE": 1,
+    "BOUNDARY": 2,
+    "PLATFORM": 3,
+    "BRIDGE": 4,
+    "WALL": 5
+}

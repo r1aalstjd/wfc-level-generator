@@ -1,10 +1,14 @@
 import numpy as np
 import random, math, time
+from enum import Enum
 from constantTable import NEUMANN_NEIGHBOR_3D
 from datetime import datetime
-from heuristicConfig import WFCHeuristic
 from pyvistaVisualizer import pyvistaVisualizer
 from patternIndex import PatternIndex, Pattern
+
+class WFCHeuristic(Enum):
+    Entropy = 0
+    Scanline = 1
 
 def printExecutionTime(func):
     def decorated(*args, **kwargs):
