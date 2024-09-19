@@ -1,12 +1,9 @@
 from Structures.Structure import Structure
 
 class Platform(Structure):
-    def __init__(self) -> None:
-        super().__init__()
-    
-    def __call__(self, pos1:tuple[int], pos2:tuple[int]) -> "Platform":
+    def __init__(self, id, pos1:tuple[int], pos2:tuple[int]) -> None:
+        super().__init__(id)
         self.setShape(pos1, pos2)
-        return self
     
     def setShape(self, pos1:tuple[int], pos2:tuple[int]) -> None:
         self.x1 = min(pos1[0], pos2[0])

@@ -10,6 +10,9 @@ class pyvistaVisualizer():
         self.randomColorData = dict()
     
     def renderPlot(self, array:np.ndarray, registryInv:list=[], colorMode:int = 1, colorSeed:int = 0) -> None:
+        """
+            주어진 3차원 데이터를 인터랙티브 시각화하는 함수
+        """
         self.colorMode = colorMode
         np.random.seed(colorSeed)
         self.plot = self.createPlot(array, registryInv, headless=False)
